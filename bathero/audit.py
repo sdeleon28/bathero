@@ -1,10 +1,10 @@
 """Audit a run log: what happened, and what the judging would have said with other
 thresholds. Usage:
 
-    python -m drumhero.audit                      # the latest run
-    python -m drumhero.audit PATH.jsonl           # a given run
-    python -m drumhero.audit --hihat-tap 96 --hihat-accent 112 --tap 84 --accent 88   # re-judge dynamics
-    python -m drumhero.audit --hits               # list every hit
+    python -m bathero.audit                      # the latest run
+    python -m bathero.audit PATH.jsonl           # a given run
+    python -m bathero.audit --hihat-tap 96 --hihat-accent 112 --tap 84 --accent 88   # re-judge dynamics
+    python -m bathero.audit --hits               # list every hit
 """
 import argparse
 import glob

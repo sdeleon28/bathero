@@ -737,7 +737,7 @@ class Renderer:
                     pygame.draw.line(surf, (60, 60, 70), (int(cx - cw / 2), int(yr - 12 * S)), (int(cx - cw / 2), int(yr + 12 * S)))
 
     def intro_card(self, surf):
-        """The level before it starts: what it teaches and what to watch (drumhero.intro), over
+        """The level before it starts: what it teaches and what to watch (bathero.intro), over
         the dimmed highway with the first notes waiting above the line; the snare starts it."""
         it, f, S = self.intro, self.f, self.s
         es = it.get("lang", "es") == "es"

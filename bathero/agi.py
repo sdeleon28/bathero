@@ -1,7 +1,7 @@
 """AGI: a waiting screen for the stream, drawn in the terminal.
 
 `cortina` (the repo's `./cortina`, symlinked into ~/bin, or
-`.venv/bin/python -m drumhero.agi`) takes over the terminal with a
+`.venv/bin/python -m bathero.agi`) takes over the terminal with a
 full-screen animation for the moments the user walks away from the camera: the
 Twitch-style "be right back" card (LIVE badge, away timer, rotating excuse) over
 a rotation of scenes that look like a machine thinking - latent space, attention,
@@ -1097,7 +1097,7 @@ def hud(cv, scene, t, total, fps, show_fps, music=None, lvl=(0.0, 0.0)):
     cv.px[1, 2 : cols - 2] += np.array(scale(SLATE, 0.22), np.float32)
     cv.px[cv.h - 3, 2 : cols - 2] += np.array(scale(SLATE, 0.22), np.float32)
     cv.text(0, 2, "AGI", mix(CYAN, WHITE, 0.4))
-    cv.text(0, 6, "∞  drumhero", scale(SLATE, 1.5))
+    cv.text(0, 6, "∞  bathero", scale(SLATE, 1.5))
     cv.text_center(0, scene.title, mix(VIOLET, WHITE, 0.45))
     if scene.sub:
         s = scene.sub

@@ -2,7 +2,7 @@
 the focus for the next session, an exercise diet and playlists the game can run as
 training sessions.
 
-The report (stats.report) is written to ~/.config/drumhero/coach/report.json and
+The report (stats.report) is written to ~/.config/bathero/coach/report.json and
 `claude -p` is started there with the Write tool only; it writes coach.json, which is
 validated (playlist items must name real levels) and kept with a timestamp.
 """
@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 
-COACH_DIR = os.path.expanduser("~/.config/drumhero/coach")
+COACH_DIR = os.path.expanduser("~/.config/bathero/coach")
 CLAUDE_BIN = shutil.which("claude") or next((c for c in (os.path.expanduser("~/.local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude") if os.path.exists(c)), None)
 
 PROMPT = """You are a drum teacher. report.json in this directory describes a student's practice in a

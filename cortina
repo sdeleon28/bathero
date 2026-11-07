@@ -1,5 +1,5 @@
 #!/bin/bash
-# The waiting screen for the stream (drumhero/agi.py). Installed globally as
+# The waiting screen for the stream (bathero/agi.py). Installed globally as
 # ~/bin/cortina -> this file, so resolve the symlink before cd-ing to the repo.
 src="${BASH_SOURCE[0]}"
 while [ -L "$src" ]; do
@@ -8,4 +8,4 @@ while [ -L "$src" ]; do
     [[ $src != /* ]] && src="$dir/$src"
 done
 cd "$(cd -P "$(dirname "$src")" && pwd)"
-exec .venv/bin/python -m drumhero.agi "$@"
+exec .venv/bin/python -m bathero.agi "$@"

@@ -1,4 +1,4 @@
-# drumhero
+# bathero
 
 Guitar Hero style drum trainer driven by MIDI. Sibling of [hhmapper](../hhmapper).
 
@@ -17,9 +17,9 @@ python3 -m venv .venv
 ## Run
 
 ```
-.venv/bin/python -m drumhero                      # auto-picks a port that looks like a drum module
-.venv/bin/python -m drumhero --port TD-17         # pick the MIDI input explicitly
-.venv/bin/python -m drumhero --log hits.csv       # dump every judged hit of the last run
+.venv/bin/python -m bathero                      # auto-picks a port that looks like a drum module
+.venv/bin/python -m bathero --port TD-17         # pick the MIDI input explicitly
+.venv/bin/python -m bathero --log hits.csv       # dump every judged hit of the last run
 ```
 
 ## Navigating with the drums
@@ -73,7 +73,7 @@ and velocity of each hit; the list on the left shows what every zone got.
 - The hi-hat's open and closed notes come in pairs: hear 46 (bow, pedal up) and
   42 comes along; hear 22 (edge, pedal down) and 26 comes along. So one strike
   per zone is enough, whatever the pedal was doing.
-- The kit is saved to `~/.config/drumhero/kit.json` (`--kit` picks another
+- The kit is saved to `~/.config/bathero/kit.json` (`--kit` picks another
   file), one list of note numbers per zone. Kits saved by earlier versions are
   spread over the zones by their factory numbers. Rerun the wizard any time from
   the menu with "Set up kit".
@@ -211,7 +211,7 @@ Every run gets a grade from 0 to 100: half from accuracy (notes hit), a third
 from hit quality (PERFECT counts 1, GOOD 0.6, OK 0.3), a fifth from dynamics
 on levels that judge them (otherwise quality again), minus two points per
 stray in a hundred notes. Grades 30, 50, 70, 85 and 94 earn one to five stars.
-The best grade per level is saved to `~/.config/drumhero/progress.json` and its
+The best grade per level is saved to `~/.config/bathero/progress.json` and its
 stars show next to the level in the lists, with totals on the hub cards. When
 a level ends the backing stops and a jingle plays for the star count: a sag for
 none or one, a plain cadence for two, a bright one for three, a rising fanfare
@@ -220,7 +220,7 @@ for four, and for five the full victory fanfare with drums.
 ## Recording a take (V)
 
 Press V anywhere (or "Recording" in Setup) to start a take, V again to stop.
-Every take is its own folder in `~/Movies/drumhero/`, the raws in `raw/` and
+Every take is its own folder in `~/Movies/bathero/`, the raws in `raw/` and
 two editions rendered from them when the take stops (both, every time; you
 manage the disk):
 
@@ -241,7 +241,7 @@ and the combo stay readable on a phone; the HUD's small text gets small) and
 gives the camera `capture_split` of the height (half by default, cropped to
 fill; 0.32 shows the whole camera picture), the pair centred vertically. Either
 edition can be rendered again later from the raws: "Takes" in Setup, or
-`python -m drumhero.capture --render "<take folder>" social`.
+`python -m bathero.capture --render "<take folder>" social`.
 
 - **Picture**: the game hands a copy of its own frame to a writer thread 30
   times a second, piped into ffmpeg (H.264 by VideoToolbox). No screen
@@ -250,7 +250,7 @@ edition can be rendered again later from the raws: "Takes" in Setup, or
 - **Sound**: the interface's own input, two channels of it (defaults: device
   "X18/XR18", channels 17 and 18). On the XR18 set USB sends 17/18 to Main L/R
   in X-AIR Edit and those channels carry exactly the mix you monitor, the game
-  and Bitwig included. `python -m drumhero.capture` records two seconds and
+  and Bitwig included. `python -m bathero.capture` records two seconds and
   shows the level of every channel so you can confirm the routing.
 - **Camera**: the first avfoundation video device whose name contains the
   `capture_camera` setting ("iPhone": Continuity Camera or Camo) is recorded by
@@ -290,7 +290,7 @@ sound and the camera, and none of them runs at the rate it claims.
 Everything measured is in take.json and `render_edition` applies it. The
 editions' sound is loudness-normalised (-16 LUFS, true peak -1.5 dB): the
 interface's USB return is quiet (peaks around -18 dBFS), inaudible on a phone.
-`python -m drumhero.capture --sync "<take folder>"` measures again from the
+`python -m bathero.capture --sync "<take folder>"` measures again from the
 raws and re-renders; `--retime "<take folder>" 60:7 970:30` inserts frozen
 frames before raw frames 60 and 970 (a take from the old recorder), then
 measures and renders.
@@ -333,7 +333,7 @@ Each playlist item names a level, a tempo rate and repetitions. Snare or Enter
 starts a playlist as a session: the game runs its levels in order at the given
 tempo, shows "session x/y" and why the level is there, and returns to the coach
 when it is done. A asks again. The analysis is kept in
-`~/.config/drumhero/coach/coach.json` (`coach_language`, `coach_model` in
+`~/.config/bathero/coach/coach.json` (`coach_language`, `coach_model` in
 settings).
 
 ## Camera & take check
@@ -366,7 +366,7 @@ Claude, no typing:
 
 Claude edits the edition of the take that matches your window (the computer
 one), or the other if only that one exists. The game writes a job folder in
-the take's folder, `edits/<edition>-<style>/` (`~/Movies/drumhero/edits/<take>/`
+the take's folder, `edits/<edition>-<style>/` (`~/Movies/bathero/edits/<take>/`
 for takes recorded before the folders existed) with `job.json` (the edition,
 the take's `take.json`, the run logs of the levels played during it, the style
 and its brief) and starts Claude Code there in print mode,
@@ -379,7 +379,7 @@ runs. Needs the `claude` CLI on the PATH (`claude_bin` in settings otherwise).
 ## Run logs and auditing
 
 Every level you play is written, when it ends, to
-`~/Library/Logs/drumhero/runs/<date-time> <level>.jsonl`: a header with the chart
+`~/Library/Logs/bathero/runs/<date-time> <level>.jsonl`: a header with the chart
 (every note with its time, instrument and accent), the lanes, the kit, the
 settings, the offset, the tempo rate and the judging thresholds, then one line per
 MIDI message, ghost, hit (judge, error, velocity, dynamic), miss and change.
@@ -387,9 +387,9 @@ Recording is an in-memory append per event and the file is written once at the
 end, so the main loop and the MIDI thread never wait on disk.
 
 ```
-.venv/bin/python -m drumhero.audit                  # the latest run: timing, dynamics, wrong calls
-.venv/bin/python -m drumhero.audit --hits           # every hit
-.venv/bin/python -m drumhero.audit --hihat-tap 104  # re-judge the run's dynamics with other thresholds
+.venv/bin/python -m bathero.audit                  # the latest run: timing, dynamics, wrong calls
+.venv/bin/python -m bathero.audit --hits           # every hit
+.venv/bin/python -m bathero.audit --hihat-tap 104  # re-judge the run's dynamics with other thresholds
 ```
 
 ## Drum sounds off: play through Bitwig
@@ -481,7 +481,7 @@ notes were played out of order or several times. `P` does the same on purpose,
 for a run you do not want recorded. The results screen says so.
 
 `--no-sound` disables audio entirely, `--no-guide` starts with the guide track
-off. If the audio crackles, raise `MIXER_BUFFER` in `drumhero/sounds.py`.
+off. If the audio crackles, raise `MIXER_BUFFER` in `bathero/sounds.py`.
 
 ## Metronome
 
@@ -565,17 +565,17 @@ token. Since the stream captures the whole display, put the terminal full screen
 on display 0 and the viewers see this instead of an empty chair.
 
 It comes with its own music: a keygen tune, the busy chiptune of a 2000s cracktro
-(`drumhero/keygen.py`), built out of the same oscillators as the game's sounds -
+(`bathero/keygen.py`), built out of the same oscillators as the game's sounds -
 four chords in a minor key, sixteenth arpeggios with a ping-pong delay, a pulse
 lead, a square bass and a drum machine, in eight sections that add and drop layers
 over about a hundred seconds, and then it loops. A different tune every run, drawn
 from a seed; `--music-seed N` plays one you liked again, `--bpm` sets the tempo.
 The animation follows the music: the card breathes with the kick, cells divide on
-it, the arpeggio lights the arcs and the particles. `python -m drumhero.keygen
+it, the arpeggio lights the arcs and the particles. `python -m bathero.keygen
 --wav tune.wav` renders one to a file without the screen.
 
 `~/bin/cortina` is a symlink to `./cortina` in this repo, which finds the repo
-through the link and runs `.venv/bin/python -m drumhero.agi`; if the repo moves,
+through the link and runs `.venv/bin/python -m bathero.agi`; if the repo moves,
 `ln -sfn <repo>/cortina ~/bin/cortina` again. `curtain` is the same screen in
 English (`~/bin/curtain` -> `./curtain`, which adds `--lang en`): the animation
 is identical, and every string a viewer reads - the badge, the card, the
@@ -624,20 +624,20 @@ curtain --note "gone for ice"        #   (or cortina --lang en)
 .venv/bin/python install_app.py
 ```
 
-builds `/Applications/drumhero.app` so the Dock, Spotlight, rcmd and other app
-switchers see drumhero as an installed application with its own name and icon,
+builds `/Applications/bathero.app` so the Dock, Spotlight, rcmd and other app
+switchers see bathero as an installed application with its own name and icon,
 and you can give it a shortcut. The bundle's executable is a copy of the venv's
 base Python, and a tiny venv config inside the bundle points it at this repo,
 so nothing but the interpreter is copied: edits to the code take effect on the
 next launch. Run the installer again after moving the repo or recreating
-`.venv`. Output goes to `~/Library/Logs/drumhero.log`. Pass a folder to install
+`.venv`. Output goes to `~/Library/Logs/bathero.log`. Pass a folder to install
 somewhere else, for example `~/Applications`.
 
 ## Audio output
 
 Setup has an "Audio output" item that cycles through the system's output
 devices (an audio interface, the display, the speakers) and remembers the
-choice in `~/.config/drumhero/settings.json`. `--audio-device XR18` picks one
+choice in `~/.config/bathero/settings.json`. `--audio-device XR18` picks one
 by name for a single run. The mixer is reopened on the new device and every
 sound is rebuilt, so it works mid-session. An unknown name falls back to the
 system default with a message in the log.
@@ -663,13 +663,13 @@ whatever the display adds. The audio mixer uses a 256-sample buffer, about 6 ms.
 
 ## Layout
 
-- `drumhero/chart.py`: notes, built-in levels, MIDI loading, lanes
-- `drumhero/game.py`: clock, judging, misses, guide track, stats
-- `drumhero/render.py`: the play field
-- `drumhero/sounds.py`: synthesized kit
-- `drumhero/kit.py`: kit file
-- `drumhero/runlog.py`, `drumhero/audit.py`: per-level run logs and the audit tool
-- `drumhero/capture.py`, `drumhero/edit.py`: recording a take, editing it with Claude Code
-- `drumhero/stats.py`, `drumhero/coach.py`: progress statistics, the coach and its playlists
-- `drumhero/devices.py`: device watcher and toasts
-- `drumhero/app.py`: menu, level select, wizard, play screen, main loop
+- `bathero/chart.py`: notes, built-in levels, MIDI loading, lanes
+- `bathero/game.py`: clock, judging, misses, guide track, stats
+- `bathero/render.py`: the play field
+- `bathero/sounds.py`: synthesized kit
+- `bathero/kit.py`: kit file
+- `bathero/runlog.py`, `bathero/audit.py`: per-level run logs and the audit tool
+- `bathero/capture.py`, `bathero/edit.py`: recording a take, editing it with Claude Code
+- `bathero/stats.py`, `bathero/coach.py`: progress statistics, the coach and its playlists
+- `bathero/devices.py`: device watcher and toasts
+- `bathero/app.py`: menu, level select, wizard, play screen, main loop

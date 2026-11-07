@@ -2,7 +2,7 @@
 until the player hits the snare (S turns it off; `App.intro_on`). One entry per level name in
 INTROS: a paragraph ("qué vamos a aprender") and a few notable points. `intro_for` adds the
 level's facts (tempo, compases, subdivisión, cuerpos, qué se juzga) from the chart itself, so
-a level without an entry still gets a screen. `python -m drumhero.intro [NAME ...]` prints
+a level without an entry still gets a screen. `python -m bathero.intro [NAME ...]` prints
 them and names the levels without an entry (`missing()`)."""
 import re
 
@@ -557,7 +557,7 @@ def missing():
 
 def main(argv=None):
     import argparse
-    ap = argparse.ArgumentParser(prog="drumhero.intro", description="print the level intros")
+    ap = argparse.ArgumentParser(prog="bathero.intro", description="print the level intros")
     ap.add_argument("name", nargs="*", help="level names (default: every level)")
     ap.add_argument("--lang", default="es")
     args = ap.parse_args(argv)

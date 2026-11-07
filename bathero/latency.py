@@ -7,7 +7,7 @@ windows (PERFECT / GOOD / OK, nearest pending note within OK_MS), and the grade 
 grade (grade_for with no dynamics). `fit_game` gives the results box its line: this run's best
 offset and what it would have gained, and the offset that maximises the mean grade over the
 last RECENT runs of the profile (pooled), which is the number to set. Run logs carry the fit as
-stats["offset_fit"]. `python -m drumhero.latency [--runs N] [--profile ID]` prints the sweep
+stats["offset_fit"]. `python -m bathero.latency [--runs N] [--profile ID]` prints the sweep
 over the recent logs.
 """
 import bisect

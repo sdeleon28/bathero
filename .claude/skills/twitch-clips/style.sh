@@ -2,7 +2,7 @@
 #   SRC  the stream recording (1920x1080, the whole display)
 #   OUT  the folder the clips go to
 #   CAM  the ffmpeg crop of the camera picture-in-picture, "crop=W:H:X:Y" (moments.py --layout)
-# It is the style of ~/Downloads/drumhero-clips-20260913 (2026-09-13, kept since: the user asked
+# It is the style of ~/Downloads/bathero-clips-20260913 (2026-09-13, kept since: the user asked
 # for it to stay the style of every clip). Menlo, Spanish caps titles, twitch.tv/xantwav under
 # the picture, -14 LUFS.
 #

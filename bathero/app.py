@@ -109,7 +109,7 @@ class App:
         self.fullscreen = False
         self.drum_queue = deque()  # navigation hits, handed to the screen on the main thread
         self.ghosts = GhostFilter()  # drops the hi-hat notes the pedal produces on its own
-        self.runlog = RunLog()       # every level is written to ~/Library/Logs/drumhero/runs when it ends
+        self.runlog = RunLog()       # every level is written to ~/Library/Logs/bathero/runs when it ends
         self.recorder = Recorder(self.settings)   # V: take of the game, the interface's mix and the camera
         self.streamer = StreamLink(self.settings, log=print)   # T: the stream, its own process (attaches to a live one)
         self.stream_phase = "off"                 # what the badge showed last frame; transitions become toasts
@@ -161,7 +161,7 @@ class App:
         w, h = (int(v) for v in args.size.lower().split("x"))
         # RESIZABLE gives the window macOS's green fullscreen button (native Spaces fullscreen).
         self.surface = pygame.display.set_mode((w, h), pygame.RESIZABLE)
-        pygame.display.set_caption("drumhero")
+        pygame.display.set_caption("bathero")
         self.size = self.surface.get_size()
         self.fonts = Fonts(self.scale)
         fullscreen = self.settings.get("fullscreen", True)
@@ -1253,7 +1253,7 @@ class HubScreen(Screen):
     def draw(self, surf, fps):
         surf.fill(BG)
         S = self.s
-        self.f.center(surf, "drumhero", self.f.big, TEXT, 52 * S)
+        self.f.center(surf, "bathero", self.f.big, TEXT, 52 * S)
         sm = self.app.stats_summary()
         strip = (f"streak {sm['streak']} day{'s' if sm['streak'] != 1 else ''}  ·  today {sm['today_minutes']:.0f} min"
                  f"  ·  {sm['total_minutes']:.0f} min in {sm['days']} days  ·  S progress  ·  C coach")
@@ -1351,12 +1351,12 @@ class ListScreen(Screen):
                                                                            f"night (22:00-08:00) lowers them another 20 %; select sets every body, wraps"),
                     (f"Start fullscreen: {'on' if self.app.settings.get('fullscreen', True) else 'off'}", "F11 or Cmd+F toggles any time, saved"),
                     ("Recording (V)", f"audio {self.app.recorder.settings['capture_audio_device']} ch {self.app.recorder.settings['capture_audio_channels']}"
-                                      f" · camera '{self.app.recorder.settings['capture_camera']}' · ~/Movies/drumhero"),
+                                      f" · camera '{self.app.recorder.settings['capture_camera']}' · ~/Movies/bathero"),
                     ("Stream (T)", f"twitch.tv/{self.app.streamer.settings['twitch_channel']} · {self.app.streamer.settings['stream_height']}p "
                                    f"{self.app.streamer.settings['stream_kbps']} kbps · "
                                    + (f"display {self.app.streamer.settings['stream_display']} and the interface, both by ffmpeg"
                                       if self.app.streamer.settings.get('stream_source', 'screen') != 'window' else "the window as you see it, audio as the takes")
-                                   + " · its own process with the LIVE badge, survives the game · ! camera and chat layer · key in ~/.config/drumhero/twitch_key"),
+                                   + " · its own process with the LIVE badge, survives the game · ! camera and chat layer · key in ~/.config/bathero/twitch_key"),
                     ("Camera & take check", "the iPhone next to the game picture, both editions' layout, the take's audio meter, a test take"),
                     ("Takes: editions, Claude edits", "every take renders a computer (16:9) and a social (9:16) edition; render one again, or have Claude cut it"),
                     ("Progress (S)", "streak, minutes, trends, records"),
@@ -2308,7 +2308,7 @@ class CameraCheckScreen(Screen):
         elif self.test_result:
             f.center(surf, self.test_result, f.mid, JUDGE_COLORS["PERFECT"] if "saved" in self.test_result else JUDGE_COLORS["MISS"], self.h - 92 * S)
         self.legend(surf, [("hihat", "size"), ("crash", "size"), ("snare", "test take 3 s"), ("kick", "back")],
-                    keys="P computer camera share · [ ] corner · S social camera share · R rescan · Enter test take · Esc back · takes in ~/Movies/drumhero")
+                    keys="P computer camera share · [ ] corner · S social camera share · R rescan · Enter test take · Esc back · takes in ~/Movies/bathero")
 
 
 # ---------------------------------------------------------------------------
@@ -2408,7 +2408,7 @@ class EditScreen(Screen):
             self.f.center(surf, note, self.f.small, JUDGE_COLORS["GOOD"] if self.app.editor.busy and not self.message else JUDGE_COLORS["MISS"],
                           self.h - 84 * S)
         self.legend(surf, [("hihat", "down"), ("crash", "up"), ("snare", "go"), ("kick", "back")],
-                    keys="arrows or j k · Enter or l · Esc or h · everything lands in the take's folder in ~/Movies/drumhero")
+                    keys="arrows or j k · Enter or l · Esc or h · everything lands in the take's folder in ~/Movies/bathero")
 
 
 # ---------------------------------------------------------------------------
@@ -3073,9 +3073,9 @@ class PlayScreen(Screen):
 
 # ---------------------------------------------------------------------------
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="drumhero", description="Guitar Hero style drum trainer driven by MIDI.")
+    ap = argparse.ArgumentParser(prog="bathero", description="Guitar Hero style drum trainer driven by MIDI.")
     ap.add_argument("--port", help="MIDI input port (substring). Default: first port that looks like a drum module")
-    ap.add_argument("--kit", help="kit file to load/save instead of ~/.config/drumhero/kit.json")
+    ap.add_argument("--kit", help="kit file to load/save instead of ~/.config/bathero/kit.json")
     ap.add_argument("--offset", type=float, default=0.0,
                     help="latency compensation in ms: your mean error when uncalibrated (positive = hits are treated as earlier); 0 = the saved value")
     ap.add_argument("--speed", type=float, default=1.0, help="tempo multiplier for every level (0.5 = half speed); [ and ] change it in play")

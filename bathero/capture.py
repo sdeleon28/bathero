@@ -1,7 +1,7 @@
 """Recording: the game's own frames, the sound card's output and an optional camera (the
 iPhone), each to its own file, and editions rendered from those raws.
 
-    V in the game starts and stops a take. Every take is its own folder in ~/Movies/drumhero/:
+    V in the game starts and stops a take. Every take is its own folder in ~/Movies/bathero/:
 
         <stamp> <name>/
             take.json                 when, how long, what was played, where everything is
@@ -16,7 +16,7 @@ iPhone), each to its own file, and editions rendered from those raws.
 
     Both editions are rendered when the take stops (the user manages the disk). They can be
     rendered again from the raws at any time: the Edit screen, or
-    `python -m drumhero.capture --render "<take folder>" social`.
+    `python -m bathero.capture --render "<take folder>" social`.
 
 How it works, and why not a screen recorder:
 - Video: the game hands a copy of its surface to a writer thread 30 times a second; the
@@ -25,7 +25,7 @@ How it works, and why not a screen recorder:
 - Audio: a sounddevice input stream on the interface (default "X18/XR18"), two of its
   input channels (default 17-18: set the XR18's USB sends 17/18 to Main L/R in X-AIR
   Edit and they carry exactly the mix you hear, the game and Bitwig included). Written
-  to a WAV by a thread. `python -m drumhero.capture --check` shows which channels have
+  to a WAV by a thread. `python -m bathero.capture --check` shows which channels have
   signal.
 - Camera (optional): ffmpeg's avfoundation records the first video device whose name
   matches the camera setting ("iPhone" by default, so Continuity Camera or Camo) to its
@@ -53,7 +53,7 @@ import time
 
 import numpy as np
 
-OUT_DIR = os.path.expanduser("~/Movies/drumhero")
+OUT_DIR = os.path.expanduser("~/Movies/bathero")
 FPS = 30
 DEFAULTS = {"capture_audio_device": "X18/XR18", "capture_audio_channels": [17, 18], "capture_split": 0.5,
             "capture_camera": "iPhone", "capture_pip": 0.28, "capture_corner": "br", "capture_camera_delay_ms": 0}
@@ -655,7 +655,7 @@ class Recorder:
             return False
         self.error = None
         self.size = (int(size[0]) // 2 * 2, int(size[1]) // 2 * 2)   # the encoder wants even sizes
-        self.tmp = tempfile.mkdtemp(prefix="drumhero-take-")
+        self.tmp = tempfile.mkdtemp(prefix="bathero-take-")
         self.name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip() or "take"
         self.t0 = time.time()
         self.started_at = time.perf_counter()
@@ -864,7 +864,7 @@ class Recorder:
 
     # --- stop, the take folder, the editions -------------------------------------------
     def stop(self):
-        """Stop and finish in the background: the raws move to ~/Movies/drumhero/<stamp> <name>/raw/
+        """Stop and finish in the background: the raws move to ~/Movies/bathero/<stamp> <name>/raw/
         with take.json beside them, then every edition is rendered. Returns the take folder."""
         if not self.active:
             return None
@@ -1153,7 +1153,7 @@ def check(settings=None, seconds=2.0):
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="drumhero takes: check the devices, or render an edition of a take")
+    ap = argparse.ArgumentParser(description="bathero takes: check the devices, or render an edition of a take")
     ap.add_argument("--check", action="store_true", help="record a moment and report the channel levels and cameras (default)")
     ap.add_argument("--render", nargs=2, metavar=("TAKE_DIR", "EDITION"), help="render computer or social from a take folder's raws")
     ap.add_argument("--retime", nargs="+", metavar="ARG", help="TAKE_DIR FRAME:COUNT ...: insert COUNT frozen frames before raw frame FRAME (repair a take whose video ran ahead), measure the sync, render both editions")

@@ -12,12 +12,12 @@ No browser, no downloading: the file is the input.
 The stream is the display as the viewers saw it: the game full frame, the camera as a
 picture-in-picture in a corner, the LIVE badge top right, sometimes the chat pane bottom left.
 Every stream's audio also stays as an AAC copy in
-`~/Movies/drumhero/streams/<local start stamp> stream.aac`, and the daemon's log
-(`~/Library/Logs/drumhero/stream.log`) says how long each stream ran.
+`~/Movies/bathero/streams/<local start stamp> stream.aac`, and the daemon's log
+(`~/Library/Logs/bathero/stream.log`) says how long each stream ran.
 
 ## Rules
 
-- **Never start or stop the stream**: no T, no `python -m drumhero.twitch --stop`, no touching
+- **Never start or stop the stream**: no T, no `python -m bathero.twitch --stop`, no touching
   the daemon.
 - **Never publish**: the clips land in a folder, the user distributes them. Do not upload, post,
   or share anything.
@@ -98,7 +98,7 @@ real run. Runs played mostly off screen (the terminal in front) and runs full of
 
 ## 3. Cut and edit
 
-Output folder: `~/Movies/drumhero/clips/<YYYYMMDD> <label>/` (the video's local date, the label
+Output folder: `~/Movies/bathero/clips/<YYYYMMDD> <label>/` (the video's local date, the label
 from the main level or the instructions, like `20260913 31 Plena 100` and
 `20260916 2 paradiddles 5 estrellas`). In it: `clips.sh` (sets `SRC`, `OUT`, `CAM`, sources
 `style.sh`, lists the cuts with their times and titles: it regenerates everything, and the user
@@ -109,7 +109,7 @@ the alignment (start, how measured, offset); what was left out and why; anything
 user about the stream. Clip names and titles are Spanish ("falso arranque y 144 de 144",
 "el remate", "la primera vuelta completa").
 
-**The style** (`style.sh`; from `~/Downloads/drumhero-clips-20260913`, the reference the user
+**The style** (`style.sh`; from `~/Downloads/bathero-clips-20260913`, the reference the user
 pointed at). Menlo, titles in Spanish caps with the middle dot as the separator
 (`'31 · PLENA · 96 BPM'`, `'2 PARADIDDLES · SIX STROKE · 1 MORE'`: commas and colons break
 drawtext), a smaller second line under the title (`'60 BPM · MANO IZQUIERDA · 5 ESTRELLAS'`),

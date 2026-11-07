@@ -1,5 +1,5 @@
 #!/bin/bash
-# The waiting screen for the stream, in English (drumhero/agi.py --lang en);
+# The waiting screen for the stream, in English (bathero/agi.py --lang en);
 # `cortina` is the same screen in Spanish. Installed globally as
 # ~/bin/curtain -> this file, so resolve the symlink before cd-ing to the repo.
 src="${BASH_SOURCE[0]}"
@@ -9,4 +9,4 @@ while [ -L "$src" ]; do
     [[ $src != /* ]] && src="$dir/$src"
 done
 cd "$(cd -P "$(dirname "$src")" && pwd)"
-exec .venv/bin/python -m drumhero.agi --lang en "$@"
+exec .venv/bin/python -m bathero.agi --lang en "$@"

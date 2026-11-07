@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build drumhero.app so macOS (Dock, Spotlight, rcmd, app switchers) sees drumhero
+"""Build bathero.app so macOS (Dock, Spotlight, rcmd, app switchers) sees bathero
 as an installed application with its own name and icon.
 
-    .venv/bin/python install_app.py                 # -> /Applications/drumhero.app
+    .venv/bin/python install_app.py                 # -> /Applications/bathero.app
     .venv/bin/python install_app.py ~/Applications  # -> somewhere else
 
 How it works: the bundle's executable is a copy of the venv's base Python binary
@@ -10,7 +10,7 @@ How it works: the bundle's executable is a copy of the venv's base Python binary
 turns the bundle into a minimal venv whose only site-packages entry is a .pth file
 that puts this repo and its .venv on sys.path and launches the game at startup.
 Nothing is copied but the interpreter: run this again after moving the repo,
-recreating .venv, or changing the icon. Logs go to ~/Library/Logs/drumhero.log.
+recreating .venv, or changing the icon. Logs go to ~/Library/Logs/bathero.log.
 """
 import os
 import plistlib
@@ -20,12 +20,12 @@ import sys
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 VENV = os.path.join(REPO, ".venv")
-NAME = "drumhero"
-BUNDLE_ID = "com.santi.drumhero"
+NAME = "bathero"
+BUNDLE_ID = "com.santi.bathero"
 VERSION = "0.1"
 LSREGISTER = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-LAUNCHER = '''"""Started by drumhero.pth while the bundle's Python initialises: runs the game and exits."""
+LAUNCHER = '''"""Started by bathero.pth while the bundle's Python initialises: runs the game and exits."""
 import os
 import sys
 import traceback
@@ -58,16 +58,16 @@ class _Stamped:
 
 
 def _run():
-    log = os.path.expanduser("~/Library/Logs/drumhero.log")
+    log = os.path.expanduser("~/Library/Logs/bathero.log")
     os.makedirs(os.path.dirname(log), exist_ok=True)
     f = open(log, "a", buffering=1)
     sys.stdout = sys.stderr = _Stamped(f)
     if not hasattr(sys, "argv"):
-        sys.argv = ["drumhero"]
+        sys.argv = ["bathero"]
     os.chdir(REPO)
     code = 0
     try:
-        from drumhero.app import main
+        from bathero.app import main
         main([])
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else 0
@@ -122,7 +122,7 @@ def make_icon(icns_path, tmp_dir):
     for i, c in enumerate(colors):
         x = int(size * (0.2 + 0.2 * i))
         pygame.draw.circle(surf, c, (x, 780), 42)
-    iconset = os.path.join(tmp_dir, "drumhero.iconset")
+    iconset = os.path.join(tmp_dir, "bathero.iconset")
     shutil.rmtree(iconset, ignore_errors=True)
     os.makedirs(iconset)
     png = os.path.join(tmp_dir, "icon_1024.png")
@@ -182,12 +182,12 @@ def build(dest_dir):
         "CFBundleInfoDictionaryVersion": "6.0",
         # without these macOS denies camera and microphone access silently (no prompt): the
         # take's camera (ffmpeg) and its audio input (sounddevice) run as this app's children
-        "NSCameraUsageDescription": "drumhero records the camera picture-in-picture in your takes.",
-        "NSMicrophoneUsageDescription": "drumhero records the audio interface's mix in your takes and meters it in the camera check.",
+        "NSCameraUsageDescription": "bathero records the camera picture-in-picture in your takes.",
+        "NSMicrophoneUsageDescription": "bathero records the audio interface's mix in your takes and meters it in the camera check.",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.music",
-        "NSHumanReadableCopyright": "drumhero",
+        "NSHumanReadableCopyright": "bathero",
     }
     with open(os.path.join(contents, "Info.plist"), "wb") as f:
         plistlib.dump(info, f)
@@ -202,7 +202,7 @@ def main():
         sys.exit(f"{dest} is not writable; try ~/Applications")
     app = build(dest)
     print(f"built {app}")
-    print("open it from Finder / Spotlight / rcmd, or: open -a drumhero")
+    print("open it from Finder / Spotlight / rcmd, or: open -a bathero")
 
 
 if __name__ == "__main__":

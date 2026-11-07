@@ -330,7 +330,7 @@ def render_level(bpm, seed, lead_in_s, total_s, sr=SR):
 
 
 def main(argv=None):
-    """`python -m drumhero.keygen [--wav out.wav]`: render one tune and play it."""
+    """`python -m bathero.keygen [--wav out.wav]`: render one tune and play it."""
     import argparse
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seed", type=int, default=None)

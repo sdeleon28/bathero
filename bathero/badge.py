@@ -12,7 +12,7 @@ meter of what goes out (peak, after the gain), a gain fader and its dB (the daem
 GAIN_PATH, the feeder applies it within half a second). Also captured by the stream: viewers
 see it too.
 
-    python -m drumhero.badge --demo     # shows one for 10 s, cycling the states
+    python -m bathero.badge --demo     # shows one for 10 s, cycling the states
 """
 import sys
 import time

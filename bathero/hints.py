@@ -11,7 +11,7 @@ threshold on a plain statistic; the numbers are the ones that read as "a problem
 2026-09-17 runs (a 22 ms bias with a 15 ms spread was the difference between four stars and
 five).
 
-    python -m drumhero.hints [PATH.jsonl ...]   # the hints for the latest run (or the given ones)
+    python -m bathero.hints [PATH.jsonl ...]   # the hints for the latest run (or the given ones)
 """
 import glob
 import os

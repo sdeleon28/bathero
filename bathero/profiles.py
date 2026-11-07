@@ -4,7 +4,7 @@ A profile is a name and a pad: the pad's icon is the profile's icon, and hitting
 the login screen is the login. Nine icons, one per pad (ICON_PADS, in keyboard order 1..9),
 drawn here as flat glyphs in the pad's colour, so no font or emoji is involved.
 
-`~/.config/drumhero/profiles.json` holds the list. Each profile has its own progress file:
+`~/.config/bathero/profiles.json` holds the list. Each profile has its own progress file:
 the first profile ever created is the owner ("main") and inherits the progress.json that was
 there before profiles existed, plus the run logs written before runs carried a profile; every
 later one gets `progress-<id>.json` and only its own runs. With no profiles at all the game
@@ -22,7 +22,7 @@ import pygame.gfxdraw
 from . import chart as C
 from .kit import PROGRESS_PATH
 
-PROFILES_PATH = os.path.expanduser("~/.config/drumhero/profiles.json")
+PROFILES_PATH = os.path.expanduser("~/.config/bathero/profiles.json")
 MAIN = "main"                    # the owner's id: the legacy progress.json and the untagged runs are theirs
 
 ICON_PADS = ["kick", "snare", "hihat", "crash", "tom1", "floor", "ride", "crash2", "pedal"]   # keys 1..9

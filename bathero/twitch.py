@@ -1,9 +1,9 @@
 """Twitch: the stream and the chat, from the game, no OBS.
 
     T in the game starts and stops the stream (so does the x next to the LIVE badge, and
-    `python -m drumhero.twitch --stop`). It never starts on its own.
+    `python -m bathero.twitch --stop`). It never starts on its own.
 
-The stream is its own process (`daemon()`, `python -m drumhero.twitch --daemon`, launched
+The stream is its own process (`daemon()`, `python -m bathero.twitch --daemon`, launched
 by the game in a new session): the game can quit, crash or be relaunched by deploy.sh and
 the stream goes on; a game started under a live stream attaches to it (StreamLink reads
 STATE_PATH, the daemon's state file, written twice a second). The LIVE badge is the daemon's
@@ -15,7 +15,7 @@ picture-in-picture, the chat), the badge, the terminal, everything.
 The stream itself (Streamer). Two sources, `stream_source` in settings:
 
 "screen" (the default since 2026-09-12): ffmpeg captures display `stream_display` through
-avfoundation, and the interface's mix comes from a separate process, `python -m drumhero.twitch
+avfoundation, and the interface's mix comes from a separate process, `python -m bathero.twitch
 --audio-feed FIFO` (audio_feed): a sounddevice input on the interface (the take's channels and
 buffer settings), blocks queued and written to a named pipe as float32 stereo, which ffmpeg
 reads as its second input. The video gets wall-clock timestamps (-use_wallclock_as_timestamps,
@@ -27,7 +27,7 @@ everything that arrived while the loop was busy -- measured 2026-09-14, half the
 200 ms chunks, metronomic, for as long as anything (the screen capture, the rtmp send) made
 ffmpeg hiccup; three networks were tried and the interface measured clean, and the cut was here.
 What goes out is the whole display, the terminal included when it is on that screen.
-Needs the Screen Recording permission for drumhero.app (macOS asks once; then relaunch the app).
+Needs the Screen Recording permission for bathero.app (macOS asks once; then relaunch the app).
 Why not avfoundation for the audio too ("Capture screen N:X18/XR18", the first version):
 measured 2026-09-12 with the interface's native buffer timestamps, ffmpeg's avfoundation input
 drops audio buffers even capturing audio alone (6.1: 113 drops, 1.3 s lost in 15 s; 8.0.1: 58
@@ -58,17 +58,17 @@ check the audio afterwards.
   and the speed (1.0x = keeping up; under it, the encoder or the network is behind and
   Twitch will see dropped frames). When ffmpeg exits (Twitch closed the connection, no
   network) the stream stops and the HUD shows the last line of its stderr.
-- The key: ~/.config/drumhero/twitch_key (TWITCH_KEY_PATH), one line, the "Primary Stream
+- The key: ~/.config/bathero/twitch_key (TWITCH_KEY_PATH), one line, the "Primary Stream
   key" of the Twitch dashboard. Never logged, never in settings.json. The URL is
   STREAM_URL_TWITCH with the key appended; `stream_url` in settings.json replaces the whole
-  URL (a local rtmp server for tests: `python -m drumhero.twitch --selftest`). With
+  URL (a local rtmp server for tests: `python -m bathero.twitch --selftest`). With
   `stream_bandwidth_test` on, `?bandwidthtest=true` is appended: Twitch takes the stream
   without going live and shows it at inspector.twitch.tv.
 
 The chat (Chat): Twitch chat is IRC over TLS; reading it needs no account or token
 (nick justinfan + digits). The pane in the game shows the last messages of the channel,
 name in the user's Twitch colour, wrapped, and reconnects by itself. Connected while the
-game's ! layer is on, live or not (or `python -m drumhero.twitch --chat` for the terminal).
+game's ! layer is on, live or not (or `python -m bathero.twitch --chat` for the terminal).
 """
 import json
 import os
@@ -88,17 +88,17 @@ import numpy as np
 
 from .capture import AUDIO_SR, audio_device_index, ffmpeg_path, input_stream_kwargs
 
-TWITCH_KEY_PATH = os.path.expanduser("~/.config/drumhero/twitch_key")
+TWITCH_KEY_PATH = os.path.expanduser("~/.config/bathero/twitch_key")
 STREAM_URL_TWITCH = "rtmps://ingest.global-contribute.live-video.net:443/app/"
 STREAM_FPS = 30
 # Twitch's limits for a non-partner: 6000 kbps, 1080p, keyframes every 2 s, AAC 160 kbps 44.1/48 kHz.
 DEFAULTS = {"twitch_channel": "xantwav", "stream_height": 1080, "stream_kbps": 6000, "stream_url": None,
             "stream_bandwidth_test": False, "stream_source": "screen", "stream_display": 0, "stream_video_device": None,
             "capture_audio_device": "X18/XR18", "capture_audio_channels": [17, 18]}
-STREAMS_DIR = os.path.expanduser("~/Movies/drumhero/streams")   # the AAC copy of every stream's audio
-STATE_PATH = os.environ.get("DRUMHERO_STREAM_STATE") or os.path.expanduser("~/.config/drumhero/stream.json")   # the daemon's state, read by the game (tests: their own file)
-DAEMON_LOG = os.path.expanduser("~/Library/Logs/drumhero/stream.log")   # the daemon's output
-GAIN_PATH = os.path.expanduser("~/.config/drumhero/stream_gain")         # the stream's audio gain in dB, one number, kept between streams
+STREAMS_DIR = os.path.expanduser("~/Movies/bathero/streams")   # the AAC copy of every stream's audio
+STATE_PATH = os.environ.get("BATHERO_STREAM_STATE") or os.path.expanduser("~/.config/bathero/stream.json")   # the daemon's state, read by the game (tests: their own file)
+DAEMON_LOG = os.path.expanduser("~/Library/Logs/bathero/stream.log")   # the daemon's output
+GAIN_PATH = os.path.expanduser("~/.config/bathero/stream_gain")         # the stream's audio gain in dB, one number, kept between streams
 GAIN_RANGE = (-12.0, 30.0)   # the badge's fader; the first streams measured -42 LUFS with the interface's mix as it came (2026-09-13)
 AUDIO_STALL_S = 1.0          # no audio callback this long: the input is reopened (at most 3 times)
 AUDIO_LAG_PAD_S = 0.25       # the audio timeline fell this far behind the wall clock: pad it with silence
@@ -212,7 +212,7 @@ class Streamer:
         tw = int(w * th / h)
         self.in_size = (w // 2 * 2, h // 2 * 2)
         self.out_size = (tw // 2 * 2, th // 2 * 2)
-        self.tmp = tempfile.mkdtemp(prefix="drumhero-stream-")
+        self.tmp = tempfile.mkdtemp(prefix="bathero-stream-")
         self.fifo = os.path.join(self.tmp, "audio.pipe")
         os.mkfifo(self.fifo)
         vf = [] if self.out_size == self.in_size else ["-vf", "scale=%d:%d:flags=bilinear" % self.out_size]
@@ -261,7 +261,7 @@ class Streamer:
         # during a stream killed it (2026-09-13).
         st = read_state()
         if not self.settings.get("stream_url") and not (st.get("active") and pid_alive(st.get("pid")) and st["pid"] != os.getpid()):
-            subprocess.run(["pkill", "-9", "-f", "drumhero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "bathero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         display = int(self.settings.get("stream_display", 0))
         video_dev = self.settings.get("stream_video_device") or f"Capture screen {display}"
         dev = self.settings["capture_audio_device"]
@@ -269,7 +269,7 @@ class Streamer:
         th = int(self.settings["stream_height"])
         self.in_size = self.out_size = (0, th)          # the display's size is ffmpeg's business; only the height is known
         sr = self._audio_rate()
-        self.tmp = tempfile.mkdtemp(prefix="drumhero-stream-")
+        self.tmp = tempfile.mkdtemp(prefix="bathero-stream-")
         self.fifo = os.path.join(self.tmp, "audio.pipe")
         os.mkfifo(self.fifo)
         if self.settings.get("stream_url"):               # a test: the copy stays with the pipe
@@ -281,7 +281,7 @@ class Streamer:
         venv_py = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".venv", "bin", "python")
         # the stream's clock: the video's first frame and the feeder's first sample are both placed against it
         t0 = time.time()
-        self.feeder = subprocess.Popen([venv_py if os.path.exists(venv_py) else sys.executable, "-m", "drumhero.twitch", "--audio-feed", self.fifo, "--device", dev,
+        self.feeder = subprocess.Popen([venv_py if os.path.exists(venv_py) else sys.executable, "-m", "bathero.twitch", "--audio-feed", self.fifo, "--device", dev,
                                         "--channels", ",".join(str(c) for c in chans), "--rate", str(sr), "--t0", "%.3f" % t0],
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.audio_level = (-99.0, -99.0)            # (peak dB, rms dB) of what the feeder sent lately, after the gain
@@ -782,7 +782,7 @@ class StreamLink:
         os.makedirs(os.path.dirname(DAEMON_LOG), exist_ok=True)
         log = open(DAEMON_LOG, "ab")
         repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self._proc = subprocess.Popen([venv_python(), "-m", "drumhero.twitch", "--daemon", "--settings", json.dumps(self.settings)],
+        self._proc = subprocess.Popen([venv_python(), "-m", "bathero.twitch", "--daemon", "--settings", json.dumps(self.settings)],
                                       cwd=repo, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         log.close()
         self.state = {"pid": self._proc.pid, "active": True, "started": time.time(), "progress": {}, "channel": self.settings["twitch_channel"]}
@@ -829,7 +829,7 @@ class StreamLink:
                 self.ended_reason = self.error = st.get("error") or "stream process died (see the stream log)"
                 self.log(f"stream: ended on its own: {self.error}")
                 if not st.get("ended"):              # killed: its capture and feeder may still hold the display
-                    subprocess.run(["pkill", "-9", "-f", "drumhero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(["pkill", "-9", "-f", "bathero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 self.log("stream: stopped")
             self._stop_sent = None
@@ -842,7 +842,7 @@ class StreamLink:
                 os.kill(int(st["pid"]), signal.SIGKILL)
             except OSError:
                 pass
-            subprocess.run(["pkill", "-9", "-f", "drumhero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "bathero-stream-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def push(self, surface):
         if self.local is not None:
@@ -1090,7 +1090,7 @@ def selftest(seconds=8, source="window", video_device=None, audio_device=None):
     frames (window) or the display (screen), the interface's audio, the received FLV probed
     at the end, with the audio's level so silence is caught."""
     import pygame
-    out = os.path.join(tempfile.mkdtemp(prefix="drumhero-selftest-"), "received.flv")
+    out = os.path.join(tempfile.mkdtemp(prefix="bathero-selftest-"), "received.flv")
     port = 19350
     server = subprocess.Popen([ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-listen", "1",
                                "-i", f"rtmp://127.0.0.1:{port}/live/test", "-c", "copy", out],
@@ -1112,7 +1112,7 @@ def selftest(seconds=8, source="window", video_device=None, audio_device=None):
     while time.perf_counter() - t0 < seconds and st.active:
         n += 1
         surf.fill((20 + (n % 40), 10, 60))
-        surf.blit(font.render(f"drumhero selftest {n}", True, (240, 240, 240)), (60, 300))
+        surf.blit(font.render(f"bathero selftest {n}", True, (240, 240, 240)), (60, 300))
         st.push(surf)
         time.sleep(1 / 120)
     print("status:", st.status)

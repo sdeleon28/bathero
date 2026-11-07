@@ -1,7 +1,7 @@
 """Edit a take with Claude Code: pick a style, no typing, and Claude cuts the video.
 
 The game writes a job folder inside the take's folder (<take>/edits/<edition>-<style>/; for the
-flat takes recorded before the folders existed, ~/Movies/drumhero/edits/<take>/) with
+flat takes recorded before the folders existed, ~/Movies/bathero/edits/<take>/) with
 job.json (the take, its sidecar with timing and the run logs of the levels played during
 it, the chosen style and its brief) and starts `claude -p` there, allowed to use ffmpeg,
 ffprobe and files only. Claude produces edit-<style>.mp4 in that folder and writes
@@ -148,7 +148,7 @@ class Editor:
         base = label(take)
         if os.path.isdir(take):                  # the edit lives in the take's folder: edits/<edition>-<style>/
             self.job_dir = os.path.join(take, "edits", f"{os.path.basename(video)[:-4]}-{style_key}")
-        else:                                    # a take recorded before the folders: ~/Movies/drumhero/edits/<take>/
+        else:                                    # a take recorded before the folders: ~/Movies/bathero/edits/<take>/
             self.job_dir = os.path.join(EDITS_DIR, base)
         os.makedirs(self.job_dir, exist_ok=True)
         meta = sidecar_for(take) or {}

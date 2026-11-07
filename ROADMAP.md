@@ -1,4 +1,4 @@
-# drumhero roadmap / open items
+# bathero roadmap / open items
 
 Loose ends as of 2026-09-09. Each item carries the context needed to pick it up cold.
 Related ground truth lives in `CLAUDE.md` (hi-hat gesture, filter rules) and
@@ -14,12 +14,12 @@ building it (a full portrait re-layout of every screen was prototyped and thrown
 the user wants the take to show what the screen showed, and both versions of every take
 without choosing one).
 
-- A take is a folder, `~/Movies/drumhero/<stamp> <name>/`: `take.json`, `raw/screen.mp4`
+- A take is a folder, `~/Movies/bathero/<stamp> <name>/`: `take.json`, `raw/screen.mp4`
   (the window as it was), `raw/camera.mp4`, `raw/audio.wav`, and the editions
   `computer.mp4` (16:9, camera picture-in-picture) and `social.mp4` (1080x1920: the screen
   as a thumbnail across the top, the camera under it `capture_split` of the height, half by
   default, cropped to fill; the pair centred vertically). Both editions render when the
-  take stops; the raws stay. `capture.render_edition` / `python -m drumhero.capture
+  take stops; the raws stay. `capture.render_edition` / `python -m bathero.capture
   --render DIR social` render one again; the Setup screen "Takes: editions, Claude edits"
   does the same from the game, and its Claude styles edit an edition (the job folder is
   `edits/<edition>-<style>/` inside the take's folder). The camera check previews both
@@ -47,7 +47,7 @@ without choosing one).
   editions. The camera still records the latest frame that arrived (Continuity Camera's
   own latency, `capture_camera_delay_ms` to compensate); automatic per-take measurement
   (MIDI hit times vs drum transients in the wav vs motion in the camera) needs the run
-  logs, which are not being written (`~/Library/Logs/drumhero/runs` does not exist).
+  logs, which are not being written (`~/Library/Logs/bathero/runs` does not exist).
 - Legacy flat takes (`<stamp> take.mp4` + `.json`) still list and can be edited with
   Claude, but have no raws to re-render from.
 - Readability of the social thumbnail: notes, judgement words and combo are fine on a
@@ -72,12 +72,12 @@ the overall level.
 
 ### 2. Twitch stream from the game, no OBS (built 2026-09-12, not yet tested against Twitch)
 
-`drumhero/twitch.py`, see CLAUDE.md "Twitch stream (T) and chat". Done: the Streamer
+`bathero/twitch.py`, see CLAUDE.md "Twitch stream (T) and chat". Done: the Streamer
 (window + interface audio to RTMPS, validated with `--selftest` against a local rtmp
 listener: H.264 1280x720 30 fps + AAC 44.1 kHz stereo received, 8 s), the Chat (joined
 #xantwav anonymously), the pane, the HUD line, the Setup row, the key file. The user made
 the account xantwav and generated the profile picture and banner from the 2026-09-10 take
-(`~/Movies/drumhero/twitch/`). Pending, in order, and every stream start is the user's:
+(`~/Movies/bathero/twitch/`). Pending, in order, and every stream start is the user's:
 
 - First run with `stream_bandwidth_test: true` in settings.json (T, then inspector.twitch.tv
   shows the session; nothing public). Check: speed stays 1.0x, no dropped frames, audio
@@ -91,7 +91,7 @@ the account xantwav and generated the profile picture and banner from the 2026-0
   line in the log, no macOS hang report. Not reproduced or explained; fixed what could do
   it (commit f09f7c4: `find_camera` off the main thread and retried every 5 s, the camera
   preview's stderr drained) and added `App._watchdog`: a frame over 2 s logs the main
-  thread's stack to ~/Library/Logs/drumhero.log. Next freeze: read that log first.
+  thread's stack to ~/Library/Logs/bathero.log. Next freeze: read that log first.
 - 2026-09-12 later: the headphone return chopped while live ("zeros in the wav"), game and
   Bitwig alike, only while the stream ran: the window source's sounddevice input on the XR18.
   The stream moved to the "screen" source (one ffmpeg, display + interface by avfoundation,
@@ -104,9 +104,9 @@ the account xantwav and generated the profile picture and banner from the 2026-0
   process (sounddevice, its own process, named pipe, wall-clock alignment with the screen
   input): selftest 0..2 ms lost in 15 s, 0 overflows, 30 fps, 0 dropped frames, real signal
   through (webcam mic test, -19 dB mean). To confirm on Twitch with the AAC copy in
-  `~/Movies/drumhero/streams/` (a dropped buffer would show as a click there).
+  `~/Movies/bathero/streams/` (a dropped buffer would show as a click there).
 - 2026-09-13: the stream became its own process (`twitch.daemon`, state in
-  `~/.config/drumhero/stream.json`, log in `~/Library/Logs/drumhero/stream.log`) because every
+  `~/.config/bathero/stream.json`, log in `~/Library/Logs/bathero/stream.log`) because every
   deploy.sh relaunch killed the live stream; the game attaches to a live one at start, T and the
   x next to the LIVE badge stop it. The badge is the daemon's own floating window (badge.py,
   PyObjC), on every screen and Space, so it shows with the game closed. Camera PiP and chat
@@ -122,7 +122,7 @@ the account xantwav and generated the profile picture and banner from the 2026-0
 
 Confirmed and fixed by recording real playing (paradiddles slow and fast, bow/edge
 single strokes accelerating, chick alone, chick + stroke together, open hats) and
-replaying the takes through `drumhero/ghost.py` and hhmapper's `State`. The old
+replaying the takes through `bathero/ghost.py` and hhmapper's `State`. The old
 rules ate real strokes in three places: bow taps 44..90 ms after an edge accent
 (zone crosstalk), every stroke played together with a chick (60 ms chick splash),
 and strokes played while the pedal was still opening (pedal motion). New rules and
@@ -197,13 +197,13 @@ same 18 rows are there. The user could not find this section while connected via
 the mixer's own Wi-Fi AP; try connecting the Mac to the mixer over Ethernet on the
 same LAN instead (see C), or use the iPad app.
 
-**Also check** `~/.config/drumhero/settings.json`: `audio_device` is
+**Also check** `~/.config/bathero/settings.json`: `audio_device` is
 "JBL Tune 780NC", so the *game's* sounds go to the headphones, not into the XR18,
 and would not be in the take even with USB sends fixed. Either set `audio_device`
 to the XR18 (the game's Audio device setting in Setup) and monitor from the mixer,
 or accept takes that only contain Bitwig.
 
-**Verify** after the change, from the drumhero venv:
+**Verify** after the change, from the bathero venv:
 
 ```
 .venv/bin/python - <<'PY'
@@ -248,7 +248,7 @@ Remote Protocol", the XR18 mirrors X32 addresses for routing: `/config/routing/C
 - Hi-hat control lessons (`chart.HIHAT_LESSONS`): user has not yet played them
   with hhmapper -> Bitwig; check that the articulation labels feel natural.
 - Gameplay with the 2026-09-09 ghost rules: play a fast hi-hat level and count
-  `ghost` entries per reason in the runlog (`drumhero.audit --hits`); the rules were
+  `ghost` entries per reason in the runlog (`bathero.audit --hits`); the rules were
   validated on recorded takes, not yet inside a level.
 - Social edition: check a real take's social.mp4 on the phone (thumbnail readability,
   camera crop at split 0.5; S in the camera check changes it).
@@ -256,6 +256,6 @@ Remote Protocol", the XR18 mirrors X32 addresses for routing: `/config/routing/C
   Wonder, Modern & Massive 2). Open question: closed hats HH2 = 59 vs preset's
   Closed Tip = 53; switch "mid body/edge" to 53 if closed hats are silent.
 - `songs/i-wont-back-down`: audio not ingested yet (needs the user's own recording,
-  never download one; see `drumhero/ingest.py`).
+  never download one; see `bathero/ingest.py`).
 - First real runs of "Edit a take with Claude" (`edit.py`) and the Coach
   (`coach.py`) have not happened; both shell out to `claude -p`.

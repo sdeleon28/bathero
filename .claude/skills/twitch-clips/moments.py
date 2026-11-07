@@ -7,7 +7,7 @@
 --file is the recording the user handed over (a Twitch VOD download, a screen recording, an
 export). Its duration comes from ffprobe; when the video started (epoch seconds of its first frame)
 is --start, or else guessed and printed: a YYYYmmdd-HHMMSS stamp in the file name (local time),
-else the AAC copy of a stream in ~/Movies/drumhero/streams whose length matches the video's (a
+else the AAC copy of a stream in ~/Movies/bathero/streams whose length matches the video's (a
 Twitch VOD is the stream, start = the copy's stamp + 6 s), else the container's creation_time
 tag, else the file's mtime minus its duration (a download's mtime is when it was downloaded).
 --align measures the start instead of guessing: 90 s of the video's sound against the matching
@@ -15,9 +15,9 @@ AAC copy, mono 8 kHz, cross-correlated with numpy (the copy starts at the daemon
 2026-09-16 the VOD's first frame came 6.02 s after it, correlation 0.89). Video time of anything
 = wall - start - offset (offset: a further correction measured on the picture, 0 by default).
 
-Prints, on the video's clock: every level played (from the run logs in ~/Library/Logs/drumhero/runs:
+Prints, on the video's clock: every level played (from the run logs in ~/Library/Logs/bathero/runs:
 name, bpm, grade, stars, max combo, misses, longest streak of PERFECT/GOOD with its time) and every
-take the drummer chose to record (~/Movies/drumhero/*/take.json), then suggested clips: every level
+take the drummer chose to record (~/Movies/bathero/*/take.json), then suggested clips: every level
 with 2 stars or more, from 2 s before its first hit to 4 s after its end (the results screen),
 best first. --layout prints the camera picture-in-picture rectangle of the video frame (from
 settings.json, capture.pip_rect) and the rects of the 1080x1920 social edition (capture.social_layout).
@@ -32,9 +32,9 @@ import subprocess
 import sys
 import time
 
-RUNS_DIR = os.path.expanduser("~/Library/Logs/drumhero/runs")
-TAKES_DIR = os.path.expanduser("~/Movies/drumhero")
-SETTINGS = os.path.expanduser("~/.config/drumhero/settings.json")
+RUNS_DIR = os.path.expanduser("~/Library/Logs/bathero/runs")
+TAKES_DIR = os.path.expanduser("~/Movies/bathero")
+SETTINGS = os.path.expanduser("~/.config/bathero/settings.json")
 
 
 def hms(s):
@@ -112,11 +112,11 @@ def probe(path):
     return float(fmt["duration"]), created
 
 
-STREAMS_DIR = os.path.expanduser("~/Movies/drumhero/streams")
+STREAMS_DIR = os.path.expanduser("~/Movies/bathero/streams")
 VOD_DELAY = 6.0     # s from the daemon's start (the AAC copy's stamp) to a Twitch VOD's first frame, measured 2026-09-16
 
 
-STREAM_LOG = os.path.expanduser("~/Library/Logs/drumhero/stream.log")
+STREAM_LOG = os.path.expanduser("~/Library/Logs/bathero/stream.log")
 
 
 def stream_lengths():
@@ -214,7 +214,7 @@ def align_start(path, duration):
 
 def layout(size):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-    from drumhero.capture import pip_rect, social_layout
+    from bathero.capture import pip_rect, social_layout
     with open(SETTINGS) as f:
         st = json.load(f)
     w, h = size

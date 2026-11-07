@@ -1,16 +1,16 @@
 """Run log: everything a level saw, written once when the level ends, so a run can be
-audited afterwards (drumhero.audit) and the code tuned against it.
+audited afterwards (bathero.audit) and the code tuned against it.
 
 Recording is a list append per event (MIDI thread or main thread, no locks, no I/O), so
 it costs nothing the player can feel. The file is JSON lines under
-~/Library/Logs/drumhero/runs/: a "run" header with the chart, the kit, the settings and
+~/Library/Logs/bathero/runs/: a "run" header with the chart, the kit, the settings and
 the judging thresholds, then one line per MIDI message, ghost, hit, miss and change.
 """
 import json
 import os
 import time
 
-RUNS_DIR = os.path.expanduser("~/Library/Logs/drumhero/runs")
+RUNS_DIR = os.path.expanduser("~/Library/Logs/bathero/runs")
 
 
 class RunLog:

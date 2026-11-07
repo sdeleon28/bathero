@@ -4,8 +4,8 @@ import os
 
 from .chart import DEFAULT_KIT, INSTRUMENT_ZONES, PADS, ZONE, ZONE_KEYS
 
-KIT_PATH = os.path.expanduser("~/.config/drumhero/kit.json")
-SETTINGS_PATH = os.path.expanduser("~/.config/drumhero/settings.json")
+KIT_PATH = os.path.expanduser("~/.config/bathero/kit.json")
+SETTINGS_PATH = os.path.expanduser("~/.config/bathero/settings.json")
 DEFAULT_SETTINGS = {"audio_device": None, "fullscreen": True, "midi_trace": None, "offset_ms": 0.0, "drum_sounds": True,
                     "capture_audio_device": "X18/XR18", "capture_audio_channels": [17, 18], "capture_camera": "iPhone",
                     "capture_pip": 0.28, "capture_corner": "br", "volume": 1.0, "metronome_volume": 1.0, "dyn_scale": 1.0, "dyn_scales": None, "coach_language": "es", "coach_model": None, "claude_bin": None,
@@ -29,7 +29,7 @@ def save_settings(settings, path=SETTINGS_PATH):
         json.dump(settings, f, indent=2)
 
 
-PROGRESS_PATH = os.path.expanduser("~/.config/drumhero/progress.json")
+PROGRESS_PATH = os.path.expanduser("~/.config/bathero/progress.json")
 
 
 # Levels that were renamed or folded into another one: old key -> current key. Applied on load.

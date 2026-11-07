@@ -1,17 +1,17 @@
-# drumhero
+# bathero
 
-Guitar Hero style drum trainer (pygame + mido). Run with `.venv/bin/python -m drumhero`.
+Guitar Hero style drum trainer (pygame + mido). Run with `.venv/bin/python -m bathero`.
 Sibling of `../hhmapper`; same conventions: own `.venv`, reply ends with the user's next action.
 
 ## Git: commit and push when a task is done (required)
 
 Commits are allowed without asking. When a task is finished and verified (and deployed, see
 below), commit it and `git push origin master` without being asked. `origin` is github
-`sdeleon28/batero`; the branch is `master`.
+`sdeleon28/bathero`; the branch is `master`.
 
 ## Deploy after every change (required)
 
-The user launches the game through an rcmd shortcut bound to `/Applications/drumhero.app`,
+The user launches the game through an rcmd shortcut bound to `/Applications/bathero.app`,
 and expects that shortcut to always open the latest code. After any change to this repo
 (code, assets, dependencies), run:
 
@@ -26,27 +26,27 @@ so the relaunch is what matters.
 
 ## Twitch stream (T), the badge, and the ! layer (camera + chat)
 
-`drumhero/twitch.py`. `T` starts and stops the stream (also the Setup row "Stream (T)" and the
+`bathero/twitch.py`. `T` starts and stops the stream (also the Setup row "Stream (T)" and the
 x next to the LIVE badge). **The stream never starts on its own, never in a test, never from a
 script: only the user presses T, and Claude does not press it for them.** For pipeline checks use
-`python -m drumhero.twitch --selftest [--source screen]` (a local rtmp listener, no Twitch;
+`python -m bathero.twitch --selftest [--source screen]` (a local rtmp listener, no Twitch;
 prints the received audio's level, so silence is caught) and
-`python -m drumhero.twitch --chat xantwav` (reads the chat, no account needed).
+`python -m bathero.twitch --chat xantwav` (reads the chat, no account needed).
 
 - **The stream is its own process** (since 2026-09-13, so deploy.sh relaunching the game does not
-  kill a live stream): T spawns `.venv/bin/python -m drumhero.twitch --daemon --settings JSON` in
+  kill a live stream): T spawns `.venv/bin/python -m bathero.twitch --daemon --settings JSON` in
   a new session (`twitch.daemon`), which runs the `Streamer` on the screen source and writes
-  `~/.config/drumhero/stream.json` twice a second (pid, when it started, ffmpeg's progress); its
-  output goes to `~/Library/Logs/drumhero/stream.log`. The game holds a `StreamLink` (`app.streamer`):
+  `~/.config/bathero/stream.json` twice a second (pid, when it started, ffmpeg's progress); its
+  output goes to `~/Library/Logs/bathero/stream.log`. The game holds a `StreamLink` (`app.streamer`):
   `phase` is off / starting / live / stopping from the state file and the pid; a game started under a
   live stream attaches to it (toast "stream live since hh:mm", the layer comes on); quitting the game
   leaves the daemon alone; `stop()` sends SIGTERM and never blocks (the daemon stops ffmpeg cleanly,
-  a few seconds; SIGKILL plus a `pkill -f drumhero-stream-` after 10 s if it ignores it). A daemon
+  a few seconds; SIGKILL plus a `pkill -f bathero-stream-` after 10 s if it ignores it). A daemon
   that dies on its own (or is killed) is reported "stream ended: ..." from the state file's error,
-  and its leftover capture is killed. `python -m drumhero.twitch --status` / `--stop` from a
+  and its leftover capture is killed. `python -m bathero.twitch --status` / `--stop` from a
   terminal. The "window" source is still the in-process Streamer and dies with the game (it is the
   game's frames); a daemon refuses to start while another is live.
-- **The badge** (`drumhero/badge.py`) is the daemon's own window, so it is on screen exactly while
+- **The badge** (`bathero/badge.py`) is the daemon's own window, so it is on screen exactly while
   the stream process lives, game or no game: Cocoa through PyObjC (`pyobjc-framework-Cocoa` in the
   venv), a borderless transparent window at the maximum window level, on every Space
   (CanJoinAllSpaces, FullScreenAuxiliary: it shows over the game's fullscreen Space and follows a
@@ -58,8 +58,8 @@ prints the received audio's level, so silence is caught) and
   stops the stream like T (the daemon's SIGTERM path). The game draws no badge of its own; the
   play HUD's right column starts under the corner while the stream lives (`Renderer.top_inset`
   from `App.badge_height`). Viewers see the badge too (the stream is the display).
-  `python -m drumhero.badge --demo` shows one for 10 s. Without PyObjC the daemon still streams,
-  badge-less. Tests give the daemon its own state file with `DRUMHERO_STREAM_STATE`.
+  `python -m bathero.badge --demo` shows one for 10 s. Without PyObjC the daemon still streams,
+  badge-less. Tests give the daemon its own state file with `BATHERO_STREAM_STATE`.
 - **The ! layer** (`App.set_layer`, `layer_on`): the streamer's overlay over any screen, independent
   of the stream: the camera as the computer edition's picture-in-picture (`capture_pip` of the
   height in `capture_corner`, 30 fps preview, border purple while live, red while a take records
@@ -75,13 +75,13 @@ prints the received audio's level, so silence is caught) and
 - Source (`stream_source`, default "screen", since the first live tests 2026-09-12): ffmpeg
   captures display `stream_display` (0) through avfoundation, so the terminal or anything else
   on that display goes out too; the interface's mix comes from a separate feeder process
-  (`python -m drumhero.twitch --audio-feed`, a sounddevice input with the take's channels and
+  (`python -m bathero.twitch --audio-feed`, a sounddevice input with the take's channels and
   buffer settings) through a named pipe; the video on the wall clock (`-copyts`, setpts
   minus the launch time t0), the audio on its own sample count, which the feeder anchors to
   the same t0 (`--t0`: the callback pads the head, and any gap over 0.25 s, with silence),
   `aresample=async` for drift. Needs the Screen Recording permission
-  for drumhero.app (macOS asks once, then relaunch the app). Every stream keeps an AAC copy of
-  its audio in `~/Movies/drumhero/streams/` to check afterwards.
+  for bathero.app (macOS asks once, then relaunch the app). Every stream keeps an AAC copy of
+  its audio in `~/Movies/bathero/streams/` to check afterwards.
   **Never stamp the audio pipe with the wall clock**
   (`-use_wallclock_as_timestamps` on the f32le input, until 2026-09-14): that dates each block
   by the moment ffmpeg got round to reading the pipe, so any hiccup in its loop (the screen
@@ -101,7 +101,7 @@ prints the received audio's level, so silence is caught) and
   "window" stays as the fallback (`stream_source: "window"`).
 - **Gain and level** (2026-09-13: the first streams went out at -42 LUFS, peaks -20 dB, the
   interface's mix as it came): the badge's audio row has a peak meter of what goes out, a gain
-  fader (-12..+30 dB, whole dB) and its value. The fader writes `~/.config/drumhero/stream_gain`
+  fader (-12..+30 dB, whole dB) and its value. The fader writes `~/.config/bathero/stream_gain`
   (one number, kept between streams, `twitch.read_gain`); the feeder re-reads it twice a second
   and multiplies its blocks (the window source's in-process input too), and prints
   "level <peak dB> <rms dB>" on stdout four times a second, which the Streamer keeps as
@@ -113,7 +113,7 @@ prints the received audio's level, so silence is caught) and
   settings, keyframe every 2 s, FLV over RTMPS to Twitch's ingest. Audio: the same interface
   channels as the take (X18/XR18, USB 17/18 = Main L/R) through the feeder, float32 stereo,
   padded with silence onto the stream's clock.
-- The key lives in `~/.config/drumhero/twitch_key` (one line). Never log it, never copy it
+- The key lives in `~/.config/bathero/twitch_key` (one line). Never log it, never copy it
   into settings.json or the repo; `twitch.redact` strips it from ffmpeg's messages.
   `stream_url` in settings replaces the whole URL (tests); `stream_bandwidth_test` appends
   `?bandwidthtest=true` (Twitch takes the stream without going live, inspector.twitch.tv).
@@ -127,17 +127,17 @@ prints the received audio's level, so silence is caught) and
 
 - **`/twitch-clips <video path> [instructions]`**: cuts a recording of the stream the user hands
   over (a downloaded VOD, a screen recording; no browser, no downloading) into clips (16:9 and
-  9:16) in `~/Movies/drumhero/clips/<date> <label>/`. The moments come from the run logs and the
+  9:16) in `~/Movies/bathero/clips/<date> <label>/`. The moments come from the run logs and the
   takes on the video's clock (`moments.py` in the skill folder: video time = wall - the video's
   start, guessed from the file name's stamp or creation_time unless given). Instructions can name
   the parts or the style. It never starts or stops the stream and never posts anything.
 
 ## Waiting screen (`cortina`)
 
-`drumhero/agi.py`, a separate terminal program, for the moments the user leaves
+`bathero/agi.py`, a separate terminal program, for the moments the user leaves
 the camera. It runs as `cortina` from any terminal: `~/bin/cortina` is a symlink
 to `./cortina` in this repo, which resolves the symlink before cd-ing here (so
-`$0` is not `~/bin`) and execs `.venv/bin/python -m drumhero.agi`. The user named
+`$0` is not `~/bin`) and execs `.venv/bin/python -m bathero.agi`. The user named
 it, and that is the name to use for it:
 a Twitch-style be-right-back card (EN VIVO badge, channel, AFK timer, big title,
 a rotating line of excuses) over six scenes that cycle every 26 s. The stream
@@ -161,11 +161,11 @@ h, f. `--title`, `--note`, `--scene`, `--seconds`, `--fps`, `--no-card`.
   `font.render(..., True, ...)` puts the shape in the ALPHA channel, so it is
   `surfarray.array_alpha`, not `array3d`. Set PYGAME_HIDE_SUPPORT_PROMPT before
   importing pygame or the banner lands on the alt screen.
-- The music is `drumhero/keygen.py`, its own renderer (not `make_arrangement`,
+- The music is `bathero/keygen.py`, its own renderer (not `make_arrangement`,
   which has no drums because it plays under a drummer): four minor chords,
   sixteenth arps with a 3/16 ping-pong delay, pulse lead, square bass and a drum
   machine, eight sections of eight bars, ~100 s, looped, all from one seed, using
-  the oscillators and the drum hits of `sounds`. `python -m drumhero.keygen
+  the oscillators and the drum hits of `sounds`. `python -m bathero.keygen
   [--wav f] [--seed N]` renders or plays one on its own. Rendering is 0.3 s
   because every distinct note is cached: four chords is a handful of waveforms.
   Balance measured by band energy after the mix (2026-09-13); the first version
@@ -207,7 +207,7 @@ h, f. `--title`, `--note`, `--scene`, `--seconds`, `--fps`, `--no-card`.
 
 ## The level intro: a snare hit starts every level (S)
 
-`drumhero/intro.py`, asked for 2026-09-19: with `intro` on in settings (default, `App.intro_on`,
+`bathero/intro.py`, asked for 2026-09-19: with `intro` on in settings (default, `App.intro_on`,
 **S** toggles it in the lists, on the play screen and from the Setup row "Level intro (S)"; the
 hub's S stays the stats) every `PlayScreen` opens **armed**: the game is paused at the top of its
 count-in (`PlayScreen.arm`, nothing plays, no note can be missed) under a card that says, in
@@ -222,12 +222,12 @@ paragraph "qué vamos a aprender" and a few "para tener en cuenta"; "derecha" / 
 swapped for the left-hand-lead version like the description's R / L), plus `facts()` (tempo,
 compases, notas, subdivisión, cuerpos) and `judged()` (dinámicas, articulación, mano guía,
 pista de fondo) read from the chart itself. **A new level needs an entry**: `python -m
-drumhero.intro [NAME ...]` prints the cards and names the levels without one (`missing()`).
+bathero.intro [NAME ...]` prints the cards and names the levels without one (`missing()`).
 With `coach_language` "en" the card shows the English description instead.
 
 ## Hints on the results screen (every attempt short of five stars)
 
-`drumhero/hints.py`, asked for 2026-09-18: deterministic, no LLM. `App.tries` counts, per level
+`bathero/hints.py`, asked for 2026-09-18: deterministic, no LLM. `App.tries` counts, per level
 key, the finished runs in a row under five stars (a rehearsal with the transport is not an
 attempt, a practice run with P is; five stars reset it; kept as `tries` in the level's progress
 entry). On every attempt short of five stars `PlayScreen.attempt` runs `hints.analyse` on the
@@ -245,17 +245,17 @@ entre los tiempos están en su lugar"; "los &" when they are all eighths), a dri
 halves of the run, the whole kit's bias (>= 15 ms), or the spread alone (std >= 25 ms) when
 nothing explains it; then soft accents
 or loud taps (with the hand when it is one hand), and the hi-hat openness confused most.
-`python -m drumhero.hints [PATH.jsonl ...] [--all] [--lang en]` prints them for a run log
+`python -m bathero.hints [PATH.jsonl ...] [--all] [--lang en]` prints them for a run log
 (`from_runlog`; the run logs carry `expression` and every hit's `art` / `played` / `art_ok`
 since this date), which is how to check a new rule against the past runs before shipping it.
 
 ## Profiles (who is playing)
 
-`drumhero/profiles.py`, asked for 2026-09-17 so a friend's stars stay apart from the user's. A
+`bathero/profiles.py`, asked for 2026-09-17 so a friend's stars stay apart from the user's. A
 profile is a name and a pad: the pad's icon (nine flat glyphs drawn in `draw_icon`, one per pad
 in `ICON_PADS` order, keys 1..9: flame, star, bolt, skull, heart, gem, moon, sun, note; no font,
 no emoji) is the profile's icon, and **hitting that pad on the login screen is the login**. The
-list lives in `~/.config/drumhero/profiles.json`.
+list lives in `~/.config/bathero/profiles.json`.
 
 - **Progress per profile**: `App.results` is loaded by `App.set_profile` from
   `PR.progress_path(profile)`, saved by `App.save_results`. The first profile ever created is
@@ -372,7 +372,7 @@ whatever the tempo, an error is always the same distance, and a slow level shows
 of chart. The HUD's tempo line says "scroll fixed" while it is on. The kit's own sounds moved
 from D to **K** on the play screen that day.
 
-## The offset fit on the results screen (`drumhero/latency.py`)
+## The offset fit on the results screen (`bathero/latency.py`)
 
 Asked for 2026-09-20, after a day of moving `offset_ms` between 20 and 85 without settling: at
 the end of every level the results box says "offset 55 ms · this run best at 62 (+2.4) · last
@@ -383,7 +383,7 @@ what it would have added, and "last N runs" the offset that maximises the mean g
 run and the profile's recent run logs pooled (`recent_curves`, cached by mtime). **The pooled
 number is the one to set**: a single run's optimum is that run's own timing (measured 2026-09-20,
 44 gallop runs: per-run optima from 22 to 86 ms, pooled 55). The fit goes into the run log as
-`stats["offset_fit"]` (without the curve). `python -m drumhero.latency [--runs N] [--profile ID]`
+`stats["offset_fit"]` (without the curve). `python -m bathero.latency [--runs N] [--profile ID]`
 prints the sweep over the recent logs. `.` and `,` still move the offset 5 ms during play.
 
 ## Open items
@@ -524,7 +524,7 @@ rendered to PNG with `pygame.image.save` for visual checks.
 ## The hi-hat gesture (Roland TD-17 with VH-10, measured 2026-09-06/07)
 
 This is the ground truth for both repos. hhmapper turns it into One Kit Wonder
-articulations for Bitwig; drumhero turns it into game hits. Both must agree.
+articulations for Bitwig; bathero turns it into game hits. Both must agree.
 
 **What the module sends.**
 
@@ -571,7 +571,7 @@ alternation, chick + stroke together, open hats; the rules must keep all of thes
 
 Resting sticks on a pad: 4..14.
 
-**Filter rules, identical in both repos** (hhmapper.py constants, drumhero/ghost.py):
+**Filter rules, identical in both repos** (hhmapper.py constants, bathero/ghost.py):
 
 - hi-hat stick note with velocity < 25: drop (both repos; hhmapper no longer holds
   strokes 40 ms for a following chick, that hold cost 40 ms of latency on every stroke)
@@ -584,7 +584,7 @@ Resting sticks on a pad: 4..14.
   whose edge twin had the note anyway).
 - hi-hat stick note on the other zone than the previous stroke, within 50 ms at velocity
   <= 95: drop (near crosstalk, since 2026-09-19: one stroke heard twice, in Bitwig as two
-  notes. Measured over ten days of drumhero's MIDI trace, 118k notes: 174 bow notes within
+  notes. Measured over ten days of bathero's MIDI trace, 118k notes: 174 bow notes within
   50 ms of an edge stroke, none over 92, none a chart note, the charts' closest hi-hat
   figure being 178 ms. It costs the real double that lands edge then bow within 50 ms at 95
   or under; until that date it was let through for that double's sake, and a friend who
@@ -618,17 +618,17 @@ Resting sticks on a pad: 4..14.
   stroke behind it was counted a stray, so dropping it gives the note back. The fastest snare
   figure any chart writes is 89 ms apart.)
 - chick with velocity <= 20: drop (hhmapper)
-- any note with velocity < 8: drop (drumhero)
+- any note with velocity < 8: drop (bathero)
 
 A change to a threshold goes to both repos and to this section. Validated 2026-09-09 by
 replaying two recorded takes (306 real strokes) through both filters: no real stroke
 dropped, every ghost above still caught. Record a take with `mido` (timestamps in ms)
 and replay it through `State` / `GhostFilter` before touching a number. Since 2026-09-19 the
-MIDI trace (`~/Library/Logs/drumhero-midi.log`: wall time, note, velocity, the filter's
+MIDI trace (`~/Library/Logs/bathero-midi.log`: wall time, note, velocity, the filter's
 reason or the judge, CC4) is the larger check: replay it and count what falls that was
 judged PERFECT / GOOD / OK.
 
-**Kit wizard rule (drumhero).** The wizard has one step per zone of the TD-17
+**Kit wizard rule (bathero).** The wizard has one step per zone of the TD-17
 (17 zones, `chart.ZONES`): the hi-hat has three, bow, edge and pedal. In the
 bow step hearing 42 or 46 assigns both; in the edge step 22 or 26 assigns
 both; 44 is only assigned in the pedal step. A number heard in two steps goes
