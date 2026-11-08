@@ -39,6 +39,8 @@ from .game import TAIL_S, lead_in_for
 from . import ghost as GH
 from . import intro as IN
 from . import keygen
+from . import songs as SG
+from .twister import Twister
 from .ghost import GhostFilter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
                      menu_music_sound, output_devices, render_backing_track, render_metronome, MENU_CHANNEL)
@@ -108,6 +110,13 @@ class App:
         self.screen_obj = None
         self.fullscreen = False
         self.drum_queue = deque()  # navigation hits, handed to the screen on the main thread
+        # the Midi Fighter Twister's bank 2 (twister.py): song mixer and tempo, handed to the main thread
+        self.twister_queue = deque()
+        self.twister = Twister(lambda name, v: self.twister_queue.append((name, v)))
+        self.twister_checked = 0.0
+        self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
+        self.tempo_job = None        # (rate, thread) stretching the stems in the background
+        self.refresh_songs()
         self.ghosts = GhostFilter()  # drops the hi-hat notes the pedal produces on its own
         self.runlog = RunLog()       # every level is written to ~/Library/Logs/bathero/runs when it ends
         self.recorder = Recorder(self.settings)   # V: take of the game, the interface's mix and the camera
@@ -414,7 +423,99 @@ class App:
     def categories(self):
         """Every category that holds levels: the two lists and one key per course
         ("course:pop-punk"); "hihat" itself is the course chooser and holds none."""
-        return ["kick", "snare"] + [c.key for c in COURSES]
+        return ["kick", "snare"] + [c.key for c in COURSES] + [SG.SONG_COURSE]
+
+    def refresh_songs(self):
+        """The imported songs (bathero.songs) as one more course, re-read from disk. It lives in
+        C.COURSE (so the lists and the play screen treat it like a course) but not in COURSES
+        (the built-in levels, which every intro and uniqueness check walks)."""
+        C.COURSE[SG.SONG_COURSE] = SG.course()
+        return C.COURSE[SG.SONG_COURSE]
+
+    # --- song mixer (the Twister) ------------------------------------------------------
+    SONG_GAINS = {"backing": ("song_backing", 1.0), "drums": ("song_drums", 0.3)}
+    SONG_BASE_GAIN = 0.8
+
+    def song_gain(self, name):
+        key, default = self.SONG_GAINS[name]
+        return float(self.settings.get(key, default))
+
+    def play_screen_song(self):
+        scr = self.screen_obj
+        return scr if isinstance(scr, PlayScreen) and scr.chart.song else None
+
+    def on_twister(self, name, v):
+        """A turn of a bank-2 knob, on the main thread (v 0..1)."""
+        if name in self.SONG_GAINS:
+            self.settings[self.SONG_GAINS[name][0]] = round(v, 3)
+            self.settings_dirty = time.perf_counter()
+            scr = self.play_screen_song()
+            if scr:
+                tr = scr.game.tracks.get(name)
+                if tr:
+                    tr[0].gain = self.SONG_BASE_GAIN * v
+                    tr[0].apply_gain()
+            self.toasts.add(f"{'backing track' if name == 'backing' else 'drum stem'} {v:.0%}", ACCENT, key="twister_" + name)
+        elif name == "metronome":
+            self.set_metro_volume(v * METRO_VOLUME_MAX)
+        elif name == "master":
+            self.set_volume(v)
+        elif name == "tempo":
+            scr = self.play_screen_song()
+            if not scr:
+                self.toasts.add("tempo knob: songs only", DIM, key="twister_tempo")
+                return
+            lo = SG.min_rate(scr.chart.bpm / scr.chart.rate)
+            rate = round(lo + v * (1 - lo), 3)
+            self.tempo_want = (rate, time.perf_counter())
+            self.toasts.add(f"tempo {scr.chart.bpm / scr.chart.rate * rate:.0f} bpm ({rate:.0%})", ACCENT, key="twister_tempo")
+
+    def poll_twister(self):
+        now = time.perf_counter()
+        if now - self.twister_checked > 3.0 and self.twister.inp is None:
+            self.twister_checked = now
+            if self.twister.open():
+                self.toasts.add(f"Twister: bank 2 is the song mixer", ACCENT, key="twister")
+                self.sync_twister()
+        last = {}
+        while self.twister_queue:
+            name, v = self.twister_queue.popleft()
+            last[name] = v                       # a fast turn sends dozens: the last one per frame is enough
+        for name, v in last.items():
+            self.on_twister(name, v)
+        if getattr(self, "settings_dirty", None) and now - self.settings_dirty > 1.0:
+            self.settings_dirty = None
+            save_settings(self.settings)
+        # the tempo knob: once it rests 0.4 s, stretch the stems in the background, then restart the song there
+        if self.tempo_want and now - self.tempo_want[1] > 0.4 and self.tempo_job is None:
+            rate = self.tempo_want[0]
+            self.tempo_want = None
+            scr = self.play_screen_song()
+            if scr and abs(rate - self.rate) > 0.004:
+                song = scr.chart.song
+                th = threading.Thread(target=lambda: [SG.audio(song, st, rate) for st in ("backing", "drums")], daemon=True)
+                th.start()
+                self.tempo_job = (rate, th)
+                self.toasts.add(f"stretching to {rate:.0%}...", DIM, key="twister_tempo")
+        if self.tempo_job and not self.tempo_job[1].is_alive():
+            rate, _ = self.tempo_job
+            self.tempo_job = None
+            scr = self.play_screen_song()
+            if scr:
+                self.rate = rate
+                scr.retry()
+
+    def sync_twister(self):
+        """Put the rings where the values are."""
+        tw = self.twister
+        for name in self.SONG_GAINS:
+            tw.ring(name, self.song_gain(name))
+        tw.ring("metronome", self.metro_volume / METRO_VOLUME_MAX)
+        tw.ring("master", SND.master())
+        scr = self.play_screen_song()
+        if scr:
+            lo = SG.min_rate(scr.chart.bpm / scr.chart.rate)
+            tw.ring("tempo", (self.rate - lo) / (1 - lo) if lo < 1 else 1)
 
     def items_for(self, cat):
         if cat in C.COURSE:
@@ -441,7 +542,16 @@ class App:
         lead_in = lead_in_for(chart.bpm)
         total = chart.length + TAIL_S + 0.5
         out = {}
-        if prog_index is not None:
+        if chart.song:
+            # an imported song: its own stems, stretched to the rate, starting where chart 0 falls in them
+            t0 = -chart.song_offset / chart.rate
+            for name in ("backing", "drums"):
+                key = ("song", chart.song, name, round(chart.rate, 3))
+                if key not in self.track_cache:
+                    self.track_cache[key] = Track(SG.audio(chart.song, name, chart.rate), t0)
+                self.track_cache[key].gain = self.SONG_BASE_GAIN * self.song_gain(name)
+                out[name] = self.track_cache[key]
+        elif prog_index is not None:
             # triplet and sextuplet levels get the shuffle arrangement: the music must confirm the subdivision;
             # a level with a style of its own (the cumbias) names it
             sub = chart.subdivision_at(0)
@@ -1104,6 +1214,7 @@ class App:
                 if self.screen_obj.on_drum(self.drum_queue.popleft()) is False:
                     running = False
             self.handle_device_events()
+            self.poll_twister()
             self.adopt_sounds()
             self.screen_obj.update()
             self.screen_obj.draw(self.surface, clock.get_fps())
@@ -1438,7 +1549,7 @@ class ListScreen(Screen):
 
     def back(self):
         if self.course:
-            self.app.go(CoursesScreen(self.app, COURSES.index(self.course)))
+            self.app.go(CoursesScreen(self.app, COURSES.index(self.course) if self.course in COURSES else len(COURSES)))
         else:
             self.app.go(HubScreen(self.app, CATEGORIES.index(next(c for c in CATEGORIES if c[0] == self.cat))))
 
@@ -1561,16 +1672,21 @@ class CoursesScreen(ListScreen):
 
     def __init__(self, app, sel=0):
         super().__init__(app, "hihat", sel)
+        self.courses = COURSES + [app.refresh_songs()]     # the imported songs last, re-read each time
 
     def items(self):
         out = []
-        for c in COURSES:
+        for c in self.courses:
             got, total = self.app.course_stars(c)
-            out.append((c.name, f"{len(c.levels)} levels · ★ {got} / {total} · {c.desc}"))
+            n = f"{len(c.levels)} {'songs' if c.key == SG.SONG_COURSE else 'levels'}"
+            out.append((c.name, f"{n} · ★ {got} / {total} · {c.desc}"))
         return out
 
     def accept(self):
-        self.app.go(ListScreen(self.app, COURSES[self.sel].key))
+        if not self.courses[self.sel].levels:
+            self.app.toasts.add("no songs yet: drop a .wav in ~/Music/bathero/inbox and run the importer", DIM, key="songs")
+            return True
+        self.app.go(ListScreen(self.app, self.courses[self.sel].key))
         return True
 
 

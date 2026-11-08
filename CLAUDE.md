@@ -284,9 +284,9 @@ list lives in `~/.config/bathero/profiles.json`.
 
 ## Courses (the hi-hat pad, since 2026-09-17)
 
-The Songs section is gone (copyright: no recordings, no MIDI import, no ingest pipeline;
-`load_midi_chart`, `load_song_folder`, `load_audio_track`, `ingest.py`, `songs/` and librosa
-went with it). In its place, **courses by genre**: `chart.Course` (key `course:<slug>`, name,
+The old Songs section went on 2026-09-17 (copyright); songs came back on 2026-11-07 as an
+import pipeline over songs the user sources (see "Imported songs" below). Alongside
+them, **courses by genre**: `chart.Course` (key `course:<slug>`, name,
 desc, levels), `COURSES` / `COURSE` in `chart.py`, each level a `_groove(..., backing=<style>)`
 with the genre's arrangement style from `sounds.STYLES` (`style_for` returns a feel that names
 a style). The hub's hi-hat card opens `CoursesScreen` (one row per course with its stars),
@@ -314,6 +314,36 @@ the old level 7 on moved up ten places; the old names map to the new ones in
 under an old name stay with the level), and the two whose new number collided with the beats
 course were renamed: "13 · Kick doubles" is "19 · Doubles under the push" and
 "15 · Around the kit" is "25 · Whole-bar fills". A new fill in any course wants the same pair.
+
+## Imported songs (`bathero/ingest.py`, `bathero/songs.py`, `bathero/twister.py`)
+
+Asked for 2026-11-07 (branch `song-import`). The user sources the songs; a `.wav` in
+`~/Music/bathero/inbox` becomes a level. **The importer runs in its own venv, `.venv-ingest`**
+(torch, demucs, beat-this, adtof-pytorch pinned at 85c192e, watchdog; never in the game's venv):
+`.venv-ingest/bin/python -m bathero.ingest [--watch | FILE]`, log in
+`~/Library/Logs/bathero/ingest.log`. Per song, into `~/Music/bathero/songs/<slug>/`, each step
+skipped when its file exists: Demucs `htdemucs_ft` two stems on MPS (`drums.wav`, `backing.wav`),
+beat_this on the full mix (`beats.txt`: time, position in the bar), ADTOF on the drum stem
+(`drums.mid`, CPU only: its CLI refuses mps), then `song.json`: chart time 0 is the first
+downbeat (`offset` = where that is in the audio), the beat grid shifted with it (`Chart.beats`,
+so bars and phrases follow the song's own tempo), notes snapped to a sixteenth or triplet eighth
+within 35 ms, one instrument within 40 ms deduped. ADTOF knows kick, snare, tom, hi-hat, cymbal
+only: no open hats, no ride, no second crash. The first song (I Won't Back Down, 3 min): 67 s.
+
+In the game the songs are one more course, "Songs", last in the hi-hat card's list
+(`App.refresh_songs` puts it in `C.COURSE` but not in `COURSES`, which the intro and
+name-uniqueness checks walk; re-read from disk whenever the courses screen opens). A song chart
+has `Chart.song` (its folder) and `song_offset`; `App.tracks_for` plays its two stems as the
+tracks "backing" and "drums" from `-song_offset / rate`. A rate other than 1 is ffmpeg `atempo`
+(pitch kept, chained under 0.5), cached as raw s16 in the song's `cache/` (0.4 s for both stems).
+
+**The Midi Fighter Twister, bank 2** (bank 1 is GroupCtl's, in `../../js-projects/bitwig-maps/GroupCtl`):
+GroupCtl's numbering (1 bottom left, left to right, a row up every four, 16 top right; CC =
+16 + (3 - row) * 4 + col on channel 1, absolute 0..127). 1 backing track, 2 drum stem (settings
+`song_backing`, `song_drums`), 3 metronome (`metronome_volume`), 4 tempo (songs only: from the
+song's tempo down to 126 bpm slower, never under rate 0.3; once the knob rests 0.4 s the stems
+are stretched in a thread and the song restarts there), 16 everything (`volume`). The game
+looks for the port every 3 s, sets the rings when it finds it, applies the last value per frame.
 
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
 
