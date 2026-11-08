@@ -44,6 +44,7 @@ class Twister:
         self.inp = self.out = None
         self.name = None
         self.lock = threading.Lock()
+        self.seen = set()          # (channel, control) already logged: one line per knob, to bathero.log
 
     def open(self):
         if self.inp is not None:
@@ -57,6 +58,7 @@ class Twister:
             outs = [n for n in mido.get_output_names() if PORT_HINT in n.lower()]
             if outs:
                 self.out = mido.open_output(outs[0])
+            print(f"twister: opened '{self.name}' (out: {outs[0] if outs else 'none'})", flush=True)
         except (OSError, IOError):
             self.close()
             return False
@@ -66,6 +68,10 @@ class Twister:
         if msg.type != "control_change":
             return
         name = KNOBS.get(POSITION.get(msg.control))
+        if (msg.channel, msg.control) not in self.seen:
+            self.seen.add((msg.channel, msg.control))
+            print(f"twister: channel {msg.channel + 1} CC {msg.control} value {msg.value} -> "
+                  f"{name or 'not ours'} (knob {POSITION.get(msg.control, '-')})", flush=True)
         if name is None:
             return
         if msg.channel == ENCODER_CH:

@@ -10,8 +10,8 @@ MIXER_BUFFER = 256          # small buffer for low latency; raise it if audio cr
 # leave the menu music or a level's tracks without a channel.
 NUM_CHANNELS = 32
 MENU_CHANNEL = 0
-TRACK_CHANNELS = {"backing": 1, "metronome": 2, "music": 3}
-RESERVED = 4
+TRACK_CHANNELS = {"backing": 1, "metronome": 2, "music": 3, "drums": 4}   # a song's drum stem too: on a free channel the kit's hits stole it
+RESERVED = 5
 
 # The game's own output level, 0..1 (the { and } keys). pygame has no master volume, so
 # every set_volume in this module multiplies by it; App.set_volume re-applies it to the
