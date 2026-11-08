@@ -360,7 +360,11 @@ GroupCtl paints them (`TwisterOutput.paint`, `Colors.BITWIG_TO_TWISTER`): hue on
 brightness 47 on channel 3; backing magenta 87, drums green 44, metronome yellow 66, tempo cyan
 19, offset blue 123, menu music pink 88, everything red 85. The game looks for the port every 3 s; when it finds it
 it paints the seven knobs and sets their rings (the keyboard's `{ }`, `- =`, `, .` move the rings
-too), and applies the last turn per frame.
+too), and applies the last turn per frame. **A turn is never echoed back to its knob** (`App.apply_turn`,
+`Twister.turning`): the Twister moves its position to any CC it receives, and until 2026-11-08 the
+setters of knobs 3, 5, 15 and 16 sent the ring a frame after the turn, a value the knob had already
+left, so a quick turn was pulled back and partly lost ("encoders sometimes don't work"). Rings go
+out for pushes, the keyboard and the sync on connect only.
 
 **The Launchpad MK2 on Twister bank 2** (`bathero/launchpad.py`, asked for 2026-11-08): the bank
 buttons send CC 0..3 on channel 4 (bank 1..4; 127 for the bank entered, 0 for the one left).

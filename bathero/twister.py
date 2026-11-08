@@ -50,6 +50,7 @@ class Twister:
         self.name = None
         self.lock = threading.Lock()
         self.seen = set()          # (channel, control) already logged: one line per knob, to bathero.log
+        self.turning = False       # True while the game applies a turn: its own ring is not echoed back
 
     def open(self):
         if self.inp is not None:
@@ -104,8 +105,11 @@ class Twister:
             self._send(BRIGHTNESS_CH, n, FULL_BRIGHTNESS)
 
     def ring(self, name, v):
-        """Set a knob's ring to v (0..1)."""
-        if self.out is None:
+        """Set a knob's ring to v (0..1). Never while a turn is applied: the Twister moves its own
+        position to the CC it receives, and an echo sent a frame after the turn carries a value the
+        knob has already left, so a quick turn was pulled back and partly lost (2026-11-08,
+        "encoders sometimes don't work": knobs 3, 5, 15, 16 echoed, 1, 2, 4 did not)."""
+        if self.out is None or self.turning:
             return
         n = next((k for k, x in KNOBS.items() if x == name), None)
         if n is not None:

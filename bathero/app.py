@@ -608,6 +608,14 @@ class App:
             return
         self.twister.ring(name, v)
 
+    def apply_turn(self, name, v):
+        """A turn from the knob itself: applied without sending its ring back (Twister.ring)."""
+        self.twister.turning = True
+        try:
+            self.on_twister(name, v)
+        finally:
+            self.twister.turning = False
+
     def poll_twister(self):
         now = time.perf_counter()
         if now - self.twister_checked > 3.0 and self.twister.inp is None:
@@ -622,7 +630,7 @@ class App:
                 last[name] = v                   # a fast turn sends dozens: the last one per frame is enough
                 continue
             for n, lv in last.items():           # turns before a push land first
-                self.on_twister(n, lv)
+                self.apply_turn(n, lv)
             last = {}
             if kind == "press":
                 self.on_twister_press(name)
@@ -634,7 +642,7 @@ class App:
                 self.toasts.add(f"offset {ms:.0f} ms" + (" (best over the recent runs)" if v is not None else " (no runs to fit)"),
                                 ACCENT, key="offset")
         for name, v in last.items():
-            self.on_twister(name, v)
+            self.apply_turn(name, v)
         if getattr(self, "settings_dirty", None) and now - self.settings_dirty > 1.0:
             self.settings_dirty = None
             save_settings(self.settings)
