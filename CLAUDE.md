@@ -362,6 +362,22 @@ brightness 47 on channel 3; backing magenta 87, drums green 44, metronome yellow
 it paints the seven knobs and sets their rings (the keyboard's `{ }`, `- =`, `, .` move the rings
 too), and applies the last turn per frame.
 
+**The Launchpad MK2 on Twister bank 2** (`bathero/launchpad.py`, asked for 2026-11-08): the bank
+buttons send CC 0..3 on channel 4 (bank 1..4; 127 for the bank entered, 0 for the one left).
+GroupCtl's `launchpadlending` package hears it too: on bank 2 its `LaunchpadOutput` /
+`LaunchpadInput` go quiet (`LaunchpadLent`), on bank 1 the `Pager` clears and re-announces its page
+(`LaunchpadReturned`). bathero paints the whole surface on bank 2 (again 0.3 s later, over a late
+frame of GroupCtl's) and on bank 1 stops sending without blanking. The last bank is kept in
+`~/.config/bathero/twister_bank` (a relaunch does not hear it). On the play screen it is GroupCtl's
+project explorer over the level: 64 pads = the level's bars from the top left, coloured by phrase,
+up to N bars of one phrase per pad; a pad jumps there (a bar of run-up, the screen says "bar 18");
+SESSION / USER 1 zoom out / in (1..32 bars a pad, auto-fit on a new level and on entering bank 2
+until zoomed by hand); LEFT / RIGHT page; MIXER then two pads marks a loop of bars
+(`App.loop_bars`, beside the phrase loop `l35` in `loop_range`; `PlayScreen.loop_span` gives
+either as times, which the renderer draws); side MUTE toggles the loop, side STOP pauses / plays
+(starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
+buttons act on release unless held 0.5 s; other screens show it dark.
+
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
 
 Asked for 2026-09-20 (the gallop under a synth pop backing drawn by index "had nothing to do

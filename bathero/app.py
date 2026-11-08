@@ -41,6 +41,7 @@ from . import intro as IN
 from . import keygen
 from . import songs as SG
 from .twister import Twister
+from . import launchpad as LP
 from .ghost import GhostFilter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
                      menu_music_sound, output_devices, render_backing_track, render_metronome, MENU_CHANNEL)
@@ -123,7 +124,15 @@ class App:
         # the Midi Fighter Twister's bank 2 (twister.py): song mixer and tempo, handed to the main thread
         self.twister_queue = deque()
         self.twister = Twister(lambda name, v: self.twister_queue.append(("turn", name, v)),
-                               lambda name: self.twister_queue.append(("press", name, None)))
+                               lambda name: self.twister_queue.append(("press", name, None)),
+                               lambda bank: self.twister_queue.append(("bank", None, bank)))
+        # the Launchpad MK2 (launchpad.py): the level's navigator while the Twister is on bank 2
+        self.launchpad_queue = deque()
+        self.launchpad = LP.Launchpad(lambda kind, name: self.launchpad_queue.append((kind, name)))
+        self.lp_explorer = LP.Explorer()
+        self.twister_bank = LP.read_bank()
+        self.launchpad_checked = 0.0
+        self.lp_repaint_at = None
         self.twister_checked = 0.0
         self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
         self.tempo_job = None        # (rate, thread) stretching the stems in the background
@@ -146,6 +155,7 @@ class App:
         self.intro_on = bool(self.settings.get("intro", True))
         self.scroll_fixed = bool(self.settings.get("scroll_fixed", False))   # D: notes fall at one speed whatever the tempo
         self.loop_range = None       # (first phrase, last phrase), kept across a retry (tempo change)
+        self.loop_bars = None        # or (first bar, end bar), marked on the Launchpad
         self.loop_on = False
         self.toasts = Toasts()
         self.camera_name = None
@@ -569,6 +579,8 @@ class App:
             last = {}
             if kind == "press":
                 self.on_twister_press(name)
+            elif kind == "bank":
+                self.on_twister_bank(v)
             elif kind == "offset_fit":
                 ms = v if v is not None else self.OFFSET_FALLBACK
                 self.set_offset(max(0, min(self.OFFSET_KNOB_MAX, ms)))
@@ -597,6 +609,41 @@ class App:
             if scr:
                 self.rate = rate
                 scr.retry()
+
+    def on_twister_bank(self, bank):
+        """The Twister changed bank: on bank 2 the Launchpad is ours (GroupCtl lets go of it at the
+        same message), anywhere else it is GroupCtl's and we stop sending."""
+        was = self.twister_bank
+        self.twister_bank = bank
+        LP.write_bank(bank)
+        self.launchpad.forget()
+        self.launchpad_queue.clear()
+        if bank == LP.LENT_BANK:
+            self.lp_explorer.enter()
+            self.lp_repaint_at = time.perf_counter() + 0.3     # again, over a late frame of GroupCtl's
+            if was != bank:
+                self.toasts.add("Launchpad: the level's navigator (Twister bank 2)", ACCENT, key="launchpad")
+        elif was == LP.LENT_BANK:
+            self.toasts.add("Launchpad back to GroupCtl", DIM, key="launchpad")
+
+    def poll_launchpad(self):
+        now = time.perf_counter()
+        lp = self.launchpad
+        if lp.inp is None and now - self.launchpad_checked > 3.0:
+            self.launchpad_checked = now
+            lp.open()
+        if lp.inp is None or self.twister_bank != LP.LENT_BANK:
+            self.launchpad_queue.clear()
+            return
+        scr = self.screen_obj if isinstance(self.screen_obj, PlayScreen) else None
+        while self.launchpad_queue:
+            kind, name = self.launchpad_queue.popleft()
+            if scr is not None:
+                scr.on_launchpad(kind, name)
+        if self.lp_repaint_at is not None and now >= self.lp_repaint_at:
+            self.lp_repaint_at = None
+            lp.forget()
+        lp.show(scr.launchpad_frame() if scr is not None else LP.blank())
 
     def sync_twister(self):
         """Put the rings where the values are."""
@@ -1309,6 +1356,7 @@ class App:
                     running = False
             self.handle_device_events()
             self.poll_twister()
+            self.poll_launchpad()
             self.adopt_sounds()
             self.screen_obj.update()
             self.screen_obj.draw(self.surface, clock.get_fps())
@@ -1324,6 +1372,9 @@ class App:
             clock.tick(TARGET_FPS)
         if self.midi_in:
             self.midi_in.close()
+        if self.twister_bank == LP.LENT_BANK:
+            self.launchpad.show(LP.blank())               # ours until bank 1: dark, not a frozen level
+        self.launchpad.close()
         self.watcher.stop()
         self.set_layer(False)
         if self.recorder.active:
@@ -3136,16 +3187,42 @@ class PlayScreen(Screen):
         each = "one bar each" if n == bars else (f"{bars // n} bars each" if bars % n == 0 else f"{bars} bars")
         return f"no phrase {(i + 1) % 10}: this level has {n} phrases, {each}"
 
-    def apply_loop(self):
-        """Hand the marked range to the game, clamped to the phrases this chart has."""
+    def loop_span(self):
+        """The marked loop as (start, end, label) in chart seconds, or None: phrases typed with l
+        (clamped to the phrases this chart has) or bars marked on the Launchpad."""
+        ch = self.chart
+        if self.app.loop_bars is not None:
+            a, b = self.app.loop_bars
+            b = min(b, ch.bars)
+            if a >= b:
+                return None
+            return ch.beat_time(a * 4), ch.beat_time(b * 4), f"bars {a + 1}-{b}"
         rng = self.app.loop_range
+        if rng is None:
+            return None
         bounds = self.phrases()
         n = len(bounds) - 1
-        if rng is None or not self.app.loop_on:
-            self.game.set_loop(None)
-            return
         a, b = min(rng[0], n - 1), min(rng[1], n - 1)
-        self.game.set_loop((bounds[a], bounds[b + 1]))
+        return bounds[a], bounds[b + 1], f"{(a + 1) % 10}-{(b + 1) % 10}"
+
+    def apply_loop(self):
+        """Hand the marked range to the game while the loop is on."""
+        span = self.loop_span()
+        self.game.set_loop(span[:2] if span is not None and self.app.loop_on else None)
+
+    def jump_to_loop(self):
+        if self.app.loop_bars is not None:
+            self.bar_jump(self.app.loop_bars[0])
+        else:
+            self.phrase_jump(self.app.loop_range[0])
+
+    def bar_jump(self, bar):
+        """Jump to the start of bar `bar` (0-based) with the phrase keys' bar of run-up."""
+        ch = self.chart
+        t = ch.beat_time(bar * 4)
+        self.game.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
+        self.app.toasts.add(ch.place(t), ACCENT, key="phrase")
+        self.app.runlog.add("seek", bar=bar + 1, chart_t=round(t, 4))
 
     def set_loop(self, a, b):
         n = len(self.phrases()) - 1
@@ -3154,30 +3231,100 @@ class PlayScreen(Screen):
             self.app.toasts.add(self.no_phrase(a, n), DIM, key="loop")
             return
         b = min(b, n - 1)                                 # a loop past the end stops at the last phrase
-        self.app.loop_range, self.app.loop_on = (a, b), True
+        self.app.loop_range, self.app.loop_bars, self.app.loop_on = (a, b), None, True
         self.apply_loop()
         self.phrase_jump(a)
         self.app.toasts.add(f"loop {(a + 1) % 10}-{(b + 1) % 10} on", ACCENT, key="loop")
         self.app.runlog.add("loop", on=True, phrases=[a + 1, b + 1])
 
     def toggle_loop(self):
-        if self.app.loop_range is None:
+        span = self.loop_span()
+        if span is None:
             self.app.toasts.add("no loop marked: l35 loops phrases 3 to 5", DIM, key="loop")
             return
         self.app.loop_on = not self.app.loop_on
         self.apply_loop()
-        a, b = self.app.loop_range
-        if self.app.loop_on:
-            bounds = self.phrases()
-            t = self.game.song_time()
-            if not (bounds[a] <= t < bounds[min(b + 1, len(bounds) - 1)]):
-                self.phrase_jump(a)                       # outside the range: go there, or it never wraps
-        self.app.toasts.add(f"loop {(a + 1) % 10}-{(b + 1) % 10} {'on' if self.app.loop_on else 'off'}",
-                            ACCENT, key="loop")
-        self.app.runlog.add("loop", on=self.app.loop_on, phrases=[a + 1, b + 1])
+        if self.app.loop_on and not (span[0] <= self.game.song_time() < span[1]):
+            self.jump_to_loop()                           # outside the range: go there, or it never wraps
+        self.app.toasts.add(f"loop {span[2]} {'on' if self.app.loop_on else 'off'}", ACCENT, key="loop")
+        self.log_loop()
+
+    def log_loop(self):
+        if self.app.loop_bars is not None:
+            self.app.runlog.add("loop", on=self.app.loop_on, bars=[self.app.loop_bars[0] + 1, self.app.loop_bars[1]])
+        elif self.app.loop_range is not None:
+            a, b = self.app.loop_range
+            self.app.runlog.add("loop", on=self.app.loop_on, phrases=[a + 1, b + 1])
 
     def clear_loop(self):
-        self.app.loop_range, self.app.loop_on = None, False
+        self.app.loop_range, self.app.loop_bars, self.app.loop_on = None, None, False
+
+    # --- the Launchpad (Twister bank 2): GroupCtl's project explorer over the level -------
+    def set_bar_loop(self, a, b):
+        """The Launchpad's loop gesture: marks bars a..b-1; on or off stays as it was (MUTE)."""
+        self.app.loop_bars, self.app.loop_range = (a, b), None
+        self.apply_loop()
+        span = self.loop_span()
+        if self.app.loop_on and span is not None and not (span[0] <= self.game.song_time() < span[1]):
+            self.jump_to_loop()
+        self.app.toasts.add(f"loop {span[2]} marked" + (" · on" if self.app.loop_on else " · MUTE starts it"),
+                            ACCENT, key="loop")
+        self.log_loop()
+
+    def on_launchpad(self, kind, name):
+        ex, g = self.app.lp_explorer, self.game
+        if kind == "top":
+            if name in ("session", "user1"):
+                bpp = ex.zoom(name == "session")
+                if bpp is not None:
+                    self.app.toasts.add(f"launchpad: {bpp} bar{'s' if bpp > 1 else ''} a pad", ACCENT, key="lp_zoom")
+            elif name in ("left", "right"):
+                ex.flip(-1 if name == "left" else 1)
+            elif name == "mixer":
+                ex.toggle_selecting()
+                if ex.selecting:
+                    self.app.toasts.add("loop: the first pad, then the last", ACCENT, key="loop")
+            return
+        if kind == "side":
+            if name == "stop":
+                if self.armed:
+                    self.start(by="launchpad")
+                elif not g.finished:
+                    g.toggle_pause()
+                    self.app.runlog.add("pause", paused=g.paused)
+            elif name == "mute" and not g.finished:
+                self.toggle_loop()
+            return
+        if kind == "pad" and not g.finished:
+            r = ex.pad(name)
+            if r is None:
+                return
+            if r[0] == "jump":
+                if self.armed:
+                    self.start(by="launchpad")
+                self.bar_jump(r[1])
+            elif r[0] == "loop":
+                self.set_bar_loop(*r[1])
+
+    def launchpad_frame(self):
+        ch, g, ex = self.chart, self.game, self.app.lp_explorer
+        colours = getattr(self, "_lp_colours", None)
+        if colours is None:
+            colours = self._lp_colours = [LP.PHRASE_COLORS[(ch.phrase_at(ch.beat_time(i * 4)) or 0) % len(LP.PHRASE_COLORS)]
+                                          for i in range(ch.bars)]
+        playing = not (self.armed or g.paused or g.finished)
+        bar = None
+        if playing:
+            t = g.song_time()
+            if g.count_in_end is not None and t < g.count_in_end:
+                t = g.count_in_end                        # the run-up of a jump: where it lands, as the screen shows
+            bar = int(ch.beat_pos(max(t, 0.0)) // 4 + 1e-6)
+        span = self.loop_span()
+        loop_bars = None
+        if span is not None:
+            loop_bars = (int(round(ch.beat_pos(span[0]) / 4)), int(round(ch.beat_pos(span[1]) / 4)))
+        ex.grid(colours, loop_bars, bar, ch.key)
+        return ex.frame(playing, self.app.loop_on and span is not None)
 
     def to_list(self):
         self.leave()
@@ -3285,8 +3432,10 @@ class PlayScreen(Screen):
         self.renderer.scroll_fixed = self.app.scroll_fixed
         if self.renderer.intro is not None:
             self.renderer.intro["practice"] = self.app.practice        # P while the intro is up
+        span = self.loop_span()
         self.renderer.transport = {"practice": self.app.practice,
-                                   "range": self.app.loop_range,
+                                   "span": None if span is None else span[:2],
+                                   "label": None if span is None else span[2],
                                    "pending": None if self.loop_digits is None else
                                    "".join(str((i + 1) % 10) for i in self.loop_digits)}
         self.renderer.draw(surf, fps)

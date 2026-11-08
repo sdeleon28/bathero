@@ -9,6 +9,9 @@ sends the same CC on channel 2, 127 down and 0 up: a push resets the knob to its
 
     1 backing track   2 drum stem   3 metronome   4 tempo   5 offset (0..127 ms)
     15 menu music   16 everything (master)
+
+The bank buttons send CC 0..3 on channel 4 (bank 1..4), 127 for the bank entered and 0 for the
+one left: `on_bank` gets the bank entered (bathero.launchpad takes the Launchpad on bank 2).
 """
 import threading
 
@@ -17,7 +20,8 @@ import mido
 PORT_HINT = "twister"
 BANK2 = 16
 KNOBS = {1: "backing", 2: "drums", 3: "metronome", 4: "tempo", 5: "offset", 15: "menu", 16: "master"}
-ENCODER_CH, BUTTON_CH = 0, 1
+ENCODER_CH, BUTTON_CH, SYSTEM_CH = 0, 1, 3
+BANKS = 4
 # The LEDs as GroupCtl paints them (TwisterOutput.paint, Colors.BITWIG_TO_TWISTER): the colour's
 # hue on channel 2 (the button channel, the other direction), the brightness on channel 3.
 COLOR_CH, BRIGHTNESS_CH, FULL_BRIGHTNESS = 1, 2, 47
@@ -38,9 +42,10 @@ class Twister:
     """Opens the Twister's ports (if it is plugged in) and hands (name, 0..1) to `on_turn` and
     a knob's name to `on_press`, from the MIDI thread: the receiver queues them for the main thread."""
 
-    def __init__(self, on_turn, on_press):
+    def __init__(self, on_turn, on_press, on_bank=None):
         self.on_turn = on_turn
         self.on_press = on_press
+        self.on_bank = on_bank
         self.inp = self.out = None
         self.name = None
         self.lock = threading.Lock()
@@ -66,6 +71,10 @@ class Twister:
 
     def _cb(self, msg):
         if msg.type != "control_change":
+            return
+        if msg.channel == SYSTEM_CH and msg.control < BANKS:
+            if msg.value > 0 and self.on_bank is not None:
+                self.on_bank(msg.control + 1)
             return
         name = KNOBS.get(POSITION.get(msg.control))
         if (msg.channel, msg.control) not in self.seen:

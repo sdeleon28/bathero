@@ -466,7 +466,9 @@ class Renderer:
             beats_left = math.ceil((count_in_end - now) / g.beat)
             i = g.chart.phrase_at(count_in_end)
             if i is not None:
-                f.center(surf, f"phrase {(i + 1) % 10}", f.large, ACCENT, self.h * 0.45 - 44 * S)
+                at_phrase = abs(g.chart.phrase_bounds()[i] - count_in_end) < 1e-4
+                label = f"phrase {(i + 1) % 10}" if at_phrase else g.chart.place(count_in_end)   # a Launchpad pad lands on any bar
+                f.center(surf, label, f.large, ACCENT, self.h * 0.45 - 44 * S)
             f.center(surf, f"in {(beats_left - 1) % 4 + 1}", f.big, TEXT, self.h * 0.45 + 16 * S)
         if finished:
             self.results(surf)
@@ -482,24 +484,28 @@ class Renderer:
         g, f, S = self.game, self.f, self.s
         bounds = g.chart.phrase_bounds()
         n = len(bounds) - 1
-        rng = self.transport.get("range")
-        a, b = (None, None) if rng is None else (rng[0], min(rng[1], n - 1))
+        span = self.transport.get("span")                 # the marked loop (chart seconds), phrases or bars
         marks = []                                        # (chart time, label, colour, width)
+        head = None
         for i in range(n):
             key = str((i + 1) % 10)
-            if i == a:
+            if span is not None and abs(bounds[i] - span[0]) < 1e-4:
+                head = bounds[i]
                 marks.append((bounds[i], f"loop {key}", self.loop_colour(loop), 2))
             else:
                 marks.append((bounds[i], key, DIM, 1))
-        if a is not None:
+        if span is not None:
+            if head is None:                              # a loop of bars that starts inside a phrase
+                head = span[0]
+                marks.append((span[0], "loop", self.loop_colour(loop), 2))
             if loop is None:
-                marks.append((bounds[b + 1], "loop end", self.loop_colour(loop), 2))
+                marks.append((span[1], "loop end", self.loop_colour(loop), 2))
             else:
                 # the wrap: the loop's head again where its tail ends, over the coming notes
-                shift = bounds[b + 1] - bounds[a]
+                shift = span[1] - span[0]
                 for t, label, col, wd in list(marks):
-                    if bounds[a] <= t <= bounds[b] and t + shift <= top:
-                        marks.append((t + shift, (label + " again") if t == bounds[a] else label, col, wd))
+                    if span[0] - 1e-4 <= t < span[1] - 1e-4 and t + shift <= top:
+                        marks.append((t + shift, (label + " again") if t == head else label, col, wd))
         x0, x1 = int(self.lane_x[0]), int(self.lane_x[-1] + self.lane_w)
         self.marker_labels = []
         landing = self.game.count_in_end if self.game.count_in_end is not None and now < self.game.count_in_end else None
@@ -528,9 +534,9 @@ class Renderer:
         """Top centre: the loop that runs, or the one marked and off, or the gesture typed."""
         f, S = self.f, self.s
         tr = self.transport
-        pending, rng = tr.get("pending"), tr.get("range")
+        pending, span, label = tr.get("pending"), tr.get("span"), tr.get("label")
         y = 126 * S                                   # under the metronome's beat squares
-        if pending is not None or rng is not None:
+        if pending is not None or span is not None:
             back = pygame.Surface((int(300 * S), int(48 * S)))
             back.fill(BG)
             back.set_alpha(215)
@@ -539,14 +545,12 @@ class Renderer:
             what = "type the last phrase" if pending else "type the first and last phrase"
             f.center(surf, f"loop  l{pending}_", f.mid, ACCENT, y)
             f.center(surf, what, f.small, ACCENT, y + 24 * S)
-        elif rng is not None:
-            n = len(self.game.chart.phrase_bounds()) - 1
-            a, b = (rng[0] + 1) % 10, (min(rng[1], n - 1) + 1) % 10
+        elif span is not None:
             if loop is not None:
-                f.center(surf, f"LOOP {a}-{b}", f.mid, ACCENT, y)
+                f.center(surf, f"LOOP {label}", f.mid, ACCENT, y)
                 f.center(surf, "\\ stops it", f.small, DIM, y + 24 * S)
             else:
-                f.center(surf, f"loop {a}-{b} off", f.mid, DIM, y)
+                f.center(surf, f"loop {label} off", f.mid, DIM, y)
                 f.center(surf, "\\ starts it again", f.small, DIM, y + 24 * S)
 
     def transport_bar(self, surf, now, loop, count_in_end=None):
@@ -563,7 +567,7 @@ class Renderer:
         landing = count_in_end is not None and now < count_in_end
         pos = count_in_end if landing else now
         cur = g.chart.phrase_at(max(pos, 0.0))
-        rng = tr.get("range")
+        span = tr.get("span")
         pending = tr.get("pending")
         typed = set() if pending is None else {(int(d) - 1) % 10 for d in pending}
         W = min(self.w - 240 * S, 720 * S)
@@ -585,7 +589,7 @@ class Renderer:
                 pygame.draw.rect(surf, lerp(LANE_BG, DIM, 0.25), box, 1)
                 f.center(surf, str((i + 1) % 10), f.small, lerp(BG, DIM, 0.4), y + H / 2, (xa + xb) / 2)
                 continue
-            inside = rng is not None and rng[0] <= i <= rng[1]
+            inside = span is not None and bounds[i] < span[1] - 1e-4 and bounds[i + 1] > span[0] + 1e-4
             fill = LANE_BG
             if inside:
                 fill = lerp(LANE_BG, ACCENT, 0.45 if loop is not None else 0.18)
@@ -599,10 +603,9 @@ class Renderer:
             color = (20, 20, 24) if i == cur else TEXT
             f.center(surf, str((i + 1) % 10), f.small, color, y + H / 2, (xa + xb) / 2)
         pygame.draw.rect(surf, DIM, pygame.Rect(int(x0), int(y), int(n * slot), int(H)), 1)
-        if rng is not None and rng[0] < n:            # the loop's frame around its band
-            a, b = rng[0], min(rng[1], n - 1)
-            frame = pygame.Rect(int(X(bounds[a]) - 2 * S), int(y - 3 * S),
-                                int(X(bounds[b + 1]) - X(bounds[a]) + 4 * S), int(H + 6 * S))
+        if span is not None:                          # the loop's frame around its band
+            frame = pygame.Rect(int(X(span[0]) - 2 * S), int(y - 3 * S),
+                                int(X(span[1]) - X(span[0]) + 4 * S), int(H + 6 * S))
             pygame.draw.rect(surf, self.loop_colour(loop), frame, max(1, int(2 * S)), border_radius=int(4 * S))
         # the playhead, over everything, dark-edged so it reads on any cell
         px = int(X(max(bounds[0], min(pos, bounds[-1]))))
