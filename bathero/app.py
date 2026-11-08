@@ -255,7 +255,7 @@ class App:
         self.settings["volume"] = SND.master()
         save_settings(self.settings)
         if self.menu_music is not None:
-            self.menu_music.set_volume(SND.MENU_MUSIC_GAIN * SND.master())
+            self.menu_music.set_volume(SND.MENU_MUSIC_GAIN * self.menu_volume * SND.master())
         if isinstance(self.screen_obj, PlayScreen):
             for track, _ in self.screen_obj.game.tracks.values():
                 track.apply_gain()
@@ -465,6 +465,8 @@ class App:
             self.set_metro_volume(v * METRO_VOLUME_MAX)
         elif name == "offset":
             self.set_offset(round(v * self.OFFSET_KNOB_MAX))
+        elif name == "menu":
+            self.set_menu_volume(v)
         elif name == "master":
             self.set_volume(v)
         elif name == "tempo":
@@ -476,6 +478,19 @@ class App:
             rate = round(lo + v * (1 - lo), 3)
             self.tempo_want = (rate, time.perf_counter())
             self.toasts.add(f"tempo {scr.chart.bpm / scr.chart.rate * rate:.0f} bpm ({rate:.0%})", ACCENT, key="twister_tempo")
+
+    @property
+    def menu_volume(self):
+        return float(self.settings.get("menu_music_volume", 1.0))
+
+    def set_menu_volume(self, v):
+        """The menu music's own level (knob 15), under the master; saved."""
+        self.settings["menu_music_volume"] = round(max(0.0, min(1.0, v)), 3)
+        self.settings_dirty = time.perf_counter()
+        if self.menu_music is not None:
+            self.menu_music.set_volume(SND.MENU_MUSIC_GAIN * self.menu_volume * SND.master())
+        self.twister.ring("menu", self.menu_volume)
+        self.toasts.add(f"menu music {self.menu_volume:.0%}", ACCENT, key="menu_volume")
 
     def set_offset(self, ms):
         """The latency offset (, . and knob 5): on the level being played at once, saved."""
@@ -501,6 +516,9 @@ class App:
             v = 1.0 / METRO_VOLUME_MAX
         elif name == "master":
             self.set_volume(1.0)
+            v = 1.0
+        elif name == "menu":
+            self.set_menu_volume(1.0)
             v = 1.0
         elif name == "tempo":
             if not self.play_screen_song():
@@ -579,6 +597,7 @@ class App:
         tw.ring("metronome", self.metro_volume / METRO_VOLUME_MAX)
         tw.ring("master", SND.master())
         tw.ring("offset", self.offset_ms / self.OFFSET_KNOB_MAX)
+        tw.ring("menu", self.menu_volume)
         scr = self.play_screen_song()
         if scr:
             lo = SG.min_rate(scr.chart.bpm / scr.chart.rate)
@@ -648,6 +667,7 @@ class App:
         want = self.menu_music_on and not isinstance(self.screen_obj, PlayScreen)
         if want and self.menu_music is None:
             self.menu_music = menu_music_sound()
+            self.menu_music.set_volume(SND.MENU_MUSIC_GAIN * self.menu_volume * SND.master())
         ch = pygame.mixer.Channel(MENU_CHANNEL)
         if want:
             if not ch.get_busy():

@@ -8,7 +8,7 @@ keeps each bank's rings, so they are right when the bank is switched to). Pushin
 sends the same CC on channel 2, 127 down and 0 up: a push resets the knob to its neutral value.
 
     1 backing track   2 drum stem   3 metronome   4 tempo   5 offset (0..127 ms)
-    16 everything (master)
+    15 menu music   16 everything (master)
 """
 import threading
 
@@ -16,13 +16,13 @@ import mido
 
 PORT_HINT = "twister"
 BANK2 = 16
-KNOBS = {1: "backing", 2: "drums", 3: "metronome", 4: "tempo", 5: "offset", 16: "master"}
+KNOBS = {1: "backing", 2: "drums", 3: "metronome", 4: "tempo", 5: "offset", 15: "menu", 16: "master"}
 ENCODER_CH, BUTTON_CH = 0, 1
 # The LEDs as GroupCtl paints them (TwisterOutput.paint, Colors.BITWIG_TO_TWISTER): the colour's
 # hue on channel 2 (the button channel, the other direction), the brightness on channel 3.
 COLOR_CH, BRIGHTNESS_CH, FULL_BRIGHTNESS = 1, 2, 47
-COLORS = {"backing": 87, "drums": 44, "metronome": 66, "tempo": 19, "offset": 123, "master": 85}
-#          magenta       green        yellow           cyan          blue           red
+COLORS = {"backing": 87, "drums": 44, "metronome": 66, "tempo": 19, "offset": 123, "menu": 88, "master": 85}
+#          magenta       green        yellow           cyan          blue           pink        red
 
 
 def cc_for(n):

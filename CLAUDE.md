@@ -343,14 +343,15 @@ GroupCtl's numbering (1 bottom left, left to right, a row up every four, 16 top 
 `song_backing`, `song_drums`), 3 metronome (`metronome_volume`), 4 tempo (songs only: from the
 song's tempo down to 126 bpm slower, never under rate 0.3; once the knob rests 0.4 s the stems
 are stretched in a thread and the song restarts there), 5 offset (0..127 ms, one per step,
-`App.set_offset`, which `,` `.` use too), 16 everything (`volume`). **Pushing an encoder resets it**
+`App.set_offset`, which `,` `.` use too), 15 menu music (`menu_music_volume`, under the master),
+16 everything (`volume`). **Pushing an encoder resets it**
 (channel 2, 127 down): backing 100 %, drum stem 0 (you are the drummer), metronome 100 % (its
-default), tempo the song's own, everything 100 %, offset the pooled fit of the recent runs
+default), tempo the song's own, menu music and everything 100 %, offset the pooled fit of the recent runs
 (`latency.pooled` over `recent_curves`, in a thread; 45 ms when there are none). **LEDs** as
 GroupCtl paints them (`TwisterOutput.paint`, `Colors.BITWIG_TO_TWISTER`): hue on channel 2,
 brightness 47 on channel 3; backing magenta 87, drums green 44, metronome yellow 66, tempo cyan
-19, offset blue 123, everything red 85. The game looks for the port every 3 s; when it finds it
-it paints the six knobs and sets their rings (the keyboard's `{ }`, `- =`, `, .` move the rings
+19, offset blue 123, menu music pink 88, everything red 85. The game looks for the port every 3 s; when it finds it
+it paints the seven knobs and sets their rings (the keyboard's `{ }`, `- =`, `, .` move the rings
 too), and applies the last turn per frame.
 
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
