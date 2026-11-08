@@ -1295,10 +1295,11 @@ assert len({ch.name for ch in LEVELS}) == len(LEVELS), "level names must be uniq
 # ---------------------------------------------------------------------------
 # Lanes
 # ---------------------------------------------------------------------------
-def build_lanes(chart: Chart, kit: dict):
-    """One lane per distinct key in the chart: instruments first (wizard order), then
-    other MIDI numbers ascending. Returns (lanes, input note -> lane index)."""
-    keys = {n.key for n in chart.notes}
+def build_lanes(chart: Chart, kit: dict, extra=()):
+    """One lane per distinct key in the chart (plus `extra`: the song editor keeps emptied lanes):
+    instruments first (wizard order), then other MIDI numbers ascending. Returns (lanes, input
+    note -> lane index)."""
+    keys = {n.key for n in chart.notes} | set(extra)
     ordered = [k for k in INSTRUMENTS if k in keys]
     ordered += sorted((k for k in keys if k not in INSTRUMENTS), key=lambda k: int(k[1:]))
     lanes, by_note, extra = [], {}, 0

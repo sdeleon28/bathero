@@ -378,6 +378,21 @@ either as times, which the renderer draws); side MUTE toggles the loop, side STO
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
 
+**Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **E** on the play screen of an
+imported song (paused, or it pauses; from the intro card too) opens the editor over the highway;
+the game stays paused and the view is the paused playhead (`Game.seek(t, 0)`), so the wheel, the
+number keys and the Launchpad's pads (`bar_jump` goes to `SongEditor.view_bar` while editing, no
+run-up; the view's bar blinks) move it. Notes show above and below the line on the grid. Click
+selects (shift adds), dragging moves the selection in time (snapped: G cycles 1/16, 1/8, 1/4,
+1/32, triplets, off) and across lanes, a drag on empty space is a marquee, a double-click adds a
+note (the lane's median velocity), right-click or Backspace deletes, **a drum hit moves the
+selection to that drum** (a lane appears; lanes stay while editing, `build_lanes(extra=)`), arrows
+nudge, cmd Z / cmd shift Z undo / redo, cmd A all, cmd wheel zooms. Every change writes song.json
+at once (times divided back to rate 1; the first keeps `song.transcribed.json`), one note per drum
+per 10 ms, and re-reads the songs course so a retry plays the edit. E / Esc done (the playhead
+parks a bar before the view), space or the Launchpad's STOP done and play. A run that was edited
+is a rehearsal (it seeked).
+
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
 
 Asked for 2026-09-20 (the gallop under a synth pop backing drawn by index "had nothing to do

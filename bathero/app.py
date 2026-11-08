@@ -42,6 +42,7 @@ from . import keygen
 from . import songs as SG
 from .twister import Twister
 from . import launchpad as LP
+from . import songedit as SE
 from .ghost import GhostFilter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
                      menu_music_sound, output_devices, render_backing_track, render_metronome, MENU_CHANNEL)
@@ -1316,6 +1317,8 @@ class App:
                     running = False
                 elif ev.type in (pygame.VIDEORESIZE, pygame.WINDOWSIZECHANGED):
                     self.on_resize()
+                elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, pygame.MOUSEWHEEL):
+                    self.screen_obj.on_mouse(ev)
                 elif ev.type == pygame.KEYDOWN:
                     if ev.key == pygame.K_F11 or (ev.key == pygame.K_f and ev.mod & (pygame.KMOD_META | pygame.KMOD_CTRL)):
                         self.toggle_fullscreen()
@@ -1428,6 +1431,10 @@ class Screen:
     def on_key(self, key):
         """Return False to quit."""
         return True
+
+    def on_mouse(self, ev):
+        """A mouse event (the song editor's)."""
+        pass
 
     def on_text(self, ch):
         """A printable character, while `typing`."""
@@ -3015,6 +3022,7 @@ class PlayScreen(Screen):
         self.armed = False            # the intro is up: the game waits, paused at its count-in, for a snare hit
         self.armed_at = 0.0
         self.start_at = None          # wall time of the snare hit that starts it (MIDI thread -> update)
+        self.editor = None            # songedit.SongEditor while the song is being edited (E, paused)
         self.game.reset()
         self.apply_loop()             # a loop marked before a tempo change keeps running
         if app.intro_on:
@@ -3024,6 +3032,44 @@ class PlayScreen(Screen):
         self.renderer = Renderer(self.game, self.app.size, self.app.fonts, self.app.ghosts)
         self.renderer.finished_at = self.finished_at
         self.renderer.intro = self.intro() if self.armed else None
+        self.renderer.edit = self.editor
+
+    # --- the song editor (E while paused, imported songs only): bathero.songedit -------------
+    def start_editing(self):
+        g = self.game
+        if not self.chart.song:
+            self.app.toasts.add("only imported songs can be edited", DIM, key="edit")
+            return
+        if g.finished:
+            self.app.toasts.add("the song is over: R plays it again, pause it there to edit", DIM, key="edit")
+            return
+        if self.armed:
+            self.armed, self.start_at = False, None
+            self.renderer.intro = None
+        if not g.paused:
+            g.toggle_pause()
+        self.loop_digits = None
+        self.editor = SE.SongEditor(self)
+        self.editor.view(g.song_time())
+        self.renderer.edit = self.editor
+        self.app.runlog.add("edit", on=True)
+        self.app.toasts.add("editing the song · E when done", ACCENT, key="edit")
+
+    def stop_editing(self, play=False):
+        """Done: the playhead parks a bar before the view (the jumps' run-up), paused unless play."""
+        ed, g, ch = self.editor, self.game, self.chart
+        self.editor = self.renderer.edit = None
+        t = max(0.0, g.song_time())
+        g.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
+        self.app.runlog.add("edit", on=False, saves=ed.saved)
+        if ed.saved:
+            self.app.toasts.add(f"song saved · {len(g.notes)} notes" + (" · playing" if play else " · space plays"), ACCENT, key="edit")
+        if play:
+            g.toggle_pause()
+
+    def on_mouse(self, ev):
+        if self.editor is not None:
+            self.editor.on_mouse(ev)
 
     # --- the intro: the level explains itself, a snare hit starts it (S) ---------------------
     def intro(self):
@@ -3065,6 +3111,16 @@ class PlayScreen(Screen):
         return self.finished_at is not None and time.perf_counter() - self.finished_at > RESULTS_GRACE_S
 
     def on_note(self, note, velocity):        # MIDI thread: judge immediately while playing
+        ed = self.editor
+        if ed is not None:
+            # editing: every pad sounds, and is where the selection goes
+            inst = self.app.instrument_for(note)
+            if inst is None or velocity < NAV_SOUND_MIN_VELOCITY:
+                return "edit"
+            self.app.sounds.play(inst, velocity, 0.8)
+            if velocity >= NAV_MIN_VELOCITY:
+                ed.on_hit(inst, velocity)
+            return "edit"
         if self.armed:
             # the intro: every pad sounds, only the snare starts the level (the main thread does it)
             inst = self.app.instrument_for(note)
@@ -3096,7 +3152,31 @@ class PlayScreen(Screen):
 
     def on_key(self, key):
         g = self.game
-        if key == pygame.K_ESCAPE:
+        ed = self.editor
+        if ed is not None:
+            if ed.on_key(key):
+                pass
+            elif key == pygame.K_e:
+                self.stop_editing()
+            elif key == pygame.K_ESCAPE:
+                if ed.sel:
+                    ed.sel = {}
+                else:
+                    self.stop_editing()
+            elif key == pygame.K_SPACE:
+                self.stop_editing(play=True)
+            elif key in KEY_LANES:
+                bounds = self.phrases()
+                i = KEY_LANES[key]
+                if i < len(bounds) - 1:
+                    ed.view(bounds[i])
+                    self.app.toasts.add(f"phrase {(i + 1) % 10}  ·  {self.chart.place(bounds[i])}", ACCENT, key="phrase")
+                else:
+                    self.app.toasts.add(self.no_phrase(i, len(bounds) - 1), DIM, key="phrase")
+            return True
+        if key == pygame.K_e:
+            self.start_editing()
+        elif key == pygame.K_ESCAPE:
             self.to_list()
         elif key == pygame.K_s:
             # the intro on or off, saved; off while it is up, the level starts right away
@@ -3218,6 +3298,9 @@ class PlayScreen(Screen):
 
     def bar_jump(self, bar):
         """Jump to the start of bar `bar` (0-based) with the phrase keys' bar of run-up."""
+        if self.editor is not None:
+            self.editor.view_bar(bar)
+            return
         ch = self.chart
         t = ch.beat_time(bar * 4)
         self.game.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
@@ -3287,7 +3370,9 @@ class PlayScreen(Screen):
             return
         if kind == "side":
             if name == "stop":
-                if self.armed:
+                if self.editor is not None:
+                    self.stop_editing(play=True)
+                elif self.armed:
                     self.start(by="launchpad")
                 elif not g.finished:
                     g.toggle_pause()
@@ -3300,7 +3385,7 @@ class PlayScreen(Screen):
             if r is None:
                 return
             if r[0] == "jump":
-                if self.armed:
+                if self.armed and self.editor is None:
                     self.start(by="launchpad")
                 self.bar_jump(r[1])
             elif r[0] == "loop":
@@ -3314,7 +3399,7 @@ class PlayScreen(Screen):
                                           for i in range(ch.bars)]
         playing = not (self.armed or g.paused or g.finished)
         bar = None
-        if playing:
+        if playing or self.editor is not None:            # editing: the view's bar blinks
             t = g.song_time()
             if g.count_in_end is not None and t < g.count_in_end:
                 t = g.count_in_end                        # the run-up of a jump: where it lands, as the screen shows
@@ -3352,6 +3437,8 @@ class PlayScreen(Screen):
             self.app.go(ListScreen(self.app, self.cat, self.index))
 
     def leave(self):
+        if self.editor is not None:
+            self.stop_editing()
         self.game.stop_tracks()
         self.app.sounds.stop_jingle()                     # the jingle must not bleed into the next screen
         self.record()
@@ -3408,6 +3495,9 @@ class PlayScreen(Screen):
         self.renderer.offset_fit = self.offset_fit
 
     def update(self):
+        if self.editor is not None:
+            self.editor.update()
+            return
         if self.armed:
             if self.start_at is not None:
                 self.start(self.start_at)

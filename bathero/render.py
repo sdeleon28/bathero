@@ -193,9 +193,11 @@ class Renderer:
         self.scroll_fixed = False   # D: the notes fall at pps whatever the tempo (else pps times the rate)
         self.offset_fit = None   # latency.fit_game's dict: the offset line under the timing
         self.intro = None        # the level's intro card while the play screen waits for the snare (intro_card)
+        self.edit = None         # songedit.SongEditor while a song is being edited (E): it draws the notes
 
     def y_for(self, note_t, now):
-        return self.line_y - (note_t - now) * self.pps * (1.0 if self.scroll_fixed else self.game.speed)
+        zoom = self.edit.zoom if self.edit is not None else 1.0
+        return self.line_y - (note_t - now) * self.pps * (1.0 if self.scroll_fixed else self.game.speed) * zoom
 
     def note_box(self, n):
         """A note's rectangle: (x, width, height, accent). Accents are taller; in a dynamics
@@ -323,13 +325,23 @@ class Renderer:
 
         # notes: from a bit before the cursor so missed ones can fade out
         top = now + LOOKAHEAD_S / (1.0 if self.scroll_fixed else speed) + 0.2
-        self.markers(surf, now, top, loop)
-        for n in g.notes[max(0, lo - 64):]:
+        if self.edit is not None:
+            # the song editor: every note on screen, above and below the line, on its grid
+            top = self.edit.window()[1]
+            self.edit.draw_grid(surf, now)
+            self.markers(surf, now, top, loop)
+            self.edit.draw_notes(surf, now)
+            notes = []
+        else:
+            self.markers(surf, now, top, loop)
+            notes = g.notes[max(0, lo - 64):]
+        for n in notes:
             if n.t > top:
                 break
             self.note(surf, n, n.t, now)
-        self.doubles(surf, now, top)
-        if loop is not None:
+        if self.edit is None:
+            self.doubles(surf, now, top)
+        if loop is not None and self.edit is None:
             # the loop's head, drawn above the line during the tail of the lap, so the notes
             # of the first bar come down instead of appearing on the line at the wrap
             a, b = loop
@@ -451,11 +463,14 @@ class Renderer:
 
         self.transport_bar(surf, now, loop, count_in_end)
         self.loop_badge(surf, loop)
-        if paused and self.intro:
+        if self.edit is not None:
+            self.edit.draw_card(surf, now)
+        elif paused and self.intro:
             self.intro_card(surf)
         elif paused:
             f.center(surf, "PAUSED", f.huge, TEXT, self.h * 0.45)
-            f.center(surf, "space resume · R restart · Esc menu", f.small, DIM, self.h * 0.45 + 70 * S)
+            f.center(surf, "space resume · R restart · Esc menu" + (" · E edit the song" if g.chart.song else ""),
+                     f.small, DIM, self.h * 0.45 + 70 * S)
         elif now < 0:
             beats_left = math.ceil(-now / g.beat)
             f.center(surf, str((beats_left - 1) % 4 + 1), f.huge, TEXT, self.h * 0.45)
