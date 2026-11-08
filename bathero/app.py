@@ -112,7 +112,8 @@ class App:
         self.drum_queue = deque()  # navigation hits, handed to the screen on the main thread
         # the Midi Fighter Twister's bank 2 (twister.py): song mixer and tempo, handed to the main thread
         self.twister_queue = deque()
-        self.twister = Twister(lambda name, v: self.twister_queue.append((name, v)))
+        self.twister = Twister(lambda name, v: self.twister_queue.append(("turn", name, v)),
+                               lambda name: self.twister_queue.append(("press", name, None)))
         self.twister_checked = 0.0
         self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
         self.tempo_job = None        # (rate, thread) stretching the stems in the background
@@ -259,6 +260,7 @@ class App:
             for track, _ in self.screen_obj.game.tracks.values():
                 track.apply_gain()
         self.toasts.add(f"volume {SND.master():.0%}", ACCENT, key="volume")
+        self.twister.ring("master", SND.master())
 
     def nudge_volume(self, d):
         self.set_volume(round(SND.master() + d * VOLUME_STEP, 2))
@@ -281,6 +283,7 @@ class App:
                 track[0].gain = METRONOME_GAIN * v
                 track[0].apply_gain()
         self.toasts.add(f"metronome {v:.0%}" + (" (off)" if v == 0 else ""), ACCENT, key="metro_volume")
+        self.twister.ring("metronome", v / METRO_VOLUME_MAX)
 
     def nudge_metro_volume(self, d):
         self.set_metro_volume(self.metro_volume + d * METRO_VOLUME_STEP)
@@ -434,6 +437,8 @@ class App:
 
     # --- song mixer (the Twister) ------------------------------------------------------
     SONG_GAINS = {"backing": ("song_backing", 1.0), "drums": ("song_drums", 0.3)}
+    OFFSET_KNOB_MAX = 127        # knob 5: 0..127 ms, one ms per step
+    OFFSET_FALLBACK = 45         # the chain's measured latency, when there are no runs to fit
     SONG_BASE_GAIN = 0.8
 
     def song_gain(self, name):
@@ -458,6 +463,8 @@ class App:
             self.toasts.add(f"{'backing track' if name == 'backing' else 'drum stem'} {v:.0%}", ACCENT, key="twister_" + name)
         elif name == "metronome":
             self.set_metro_volume(v * METRO_VOLUME_MAX)
+        elif name == "offset":
+            self.set_offset(round(v * self.OFFSET_KNOB_MAX))
         elif name == "master":
             self.set_volume(v)
         elif name == "tempo":
@@ -470,6 +477,52 @@ class App:
             self.tempo_want = (rate, time.perf_counter())
             self.toasts.add(f"tempo {scr.chart.bpm / scr.chart.rate * rate:.0f} bpm ({rate:.0%})", ACCENT, key="twister_tempo")
 
+    def set_offset(self, ms):
+        """The latency offset (, . and knob 5): on the level being played at once, saved."""
+        self.offset_ms = float(ms)
+        if isinstance(self.screen_obj, PlayScreen):
+            self.screen_obj.game.offset_ms = self.offset_ms
+        self.settings["offset_ms"] = self.offset_ms
+        self.settings_dirty = time.perf_counter()
+        self.runlog.add("offset", offset_ms=self.offset_ms)
+        self.twister.ring("offset", self.offset_ms / self.OFFSET_KNOB_MAX)
+        self.toasts.add(f"offset {self.offset_ms:.0f} ms", ACCENT, key="offset")
+
+    def on_twister_press(self, name):
+        """A pushed encoder: its knob back to the neutral value. The mix: backing full, drum stem
+        silent (you are the drummer), metronome and everything at their default; the song's own
+        tempo; the offset the recent runs fit best (the results box's "last N runs"), worked out
+        in a thread since it reads the run logs, the chain's 45 ms when there are none."""
+        if name in self.SONG_GAINS:
+            v = {"backing": 1.0, "drums": 0.0}[name]
+            self.on_twister(name, v)
+        elif name == "metronome":
+            self.set_metro_volume(1.0)
+            v = 1.0 / METRO_VOLUME_MAX
+        elif name == "master":
+            self.set_volume(1.0)
+            v = 1.0
+        elif name == "tempo":
+            if not self.play_screen_song():
+                return
+            self.tempo_want = (1.0, 0.0)
+            v = 1.0
+        elif name == "offset":
+            profile = self.profile_id
+
+            def fit():
+                try:
+                    best = LA.pooled([cv for _, cv in LA.recent_curves(profile)])
+                except Exception:
+                    best = None
+                self.twister_queue.append(("offset_fit", "offset", best))
+            threading.Thread(target=fit, daemon=True).start()
+            self.toasts.add("offset: fitting the recent runs...", DIM, key="offset")
+            return
+        else:
+            return
+        self.twister.ring(name, v)
+
     def poll_twister(self):
         now = time.perf_counter()
         if now - self.twister_checked > 3.0 and self.twister.inp is None:
@@ -479,8 +532,20 @@ class App:
                 self.sync_twister()
         last = {}
         while self.twister_queue:
-            name, v = self.twister_queue.popleft()
-            last[name] = v                       # a fast turn sends dozens: the last one per frame is enough
+            kind, name, v = self.twister_queue.popleft()
+            if kind == "turn":
+                last[name] = v                   # a fast turn sends dozens: the last one per frame is enough
+                continue
+            for n, lv in last.items():           # turns before a push land first
+                self.on_twister(n, lv)
+            last = {}
+            if kind == "press":
+                self.on_twister_press(name)
+            elif kind == "offset_fit":
+                ms = v if v is not None else self.OFFSET_FALLBACK
+                self.set_offset(max(0, min(self.OFFSET_KNOB_MAX, ms)))
+                self.toasts.add(f"offset {ms:.0f} ms" + (" (best over the recent runs)" if v is not None else " (no runs to fit)"),
+                                ACCENT, key="offset")
         for name, v in last.items():
             self.on_twister(name, v)
         if getattr(self, "settings_dirty", None) and now - self.settings_dirty > 1.0:
@@ -508,10 +573,12 @@ class App:
     def sync_twister(self):
         """Put the rings where the values are."""
         tw = self.twister
+        tw.paint()
         for name in self.SONG_GAINS:
             tw.ring(name, self.song_gain(name))
         tw.ring("metronome", self.metro_volume / METRO_VOLUME_MAX)
         tw.ring("master", SND.master())
+        tw.ring("offset", self.offset_ms / self.OFFSET_KNOB_MAX)
         scr = self.play_screen_song()
         if scr:
             lo = SG.min_rate(scr.chart.bpm / scr.chart.rate)
@@ -2950,10 +3017,7 @@ class PlayScreen(Screen):
             self.app.rate = round(min(2.0, max(0.3, self.app.rate + step)), 2)
             self.retry()
         elif key in (pygame.K_COMMA, pygame.K_PERIOD):
-            g.offset_ms = self.app.offset_ms = g.offset_ms + (5 if key == pygame.K_PERIOD else -5)
-            self.app.settings["offset_ms"] = self.app.offset_ms      # remembered across runs
-            self.app.runlog.add("offset", offset_ms=self.app.offset_ms)
-            save_settings(self.app.settings)
+            self.app.set_offset(g.offset_ms + (5 if key == pygame.K_PERIOD else -5))   # remembered across runs
         elif key == pygame.K_g:
             g.guide = self.app.guide = not g.guide
         elif key == pygame.K_d:
