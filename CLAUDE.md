@@ -378,6 +378,22 @@ either as times, which the renderer draws); side MUTE toggles the loop, side STO
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
 
+**The importer from the game** (`bathero/importer.py`, asked for 2026-11-08; until then it only ever
+ran by hand): the importer writes `~/.config/bathero/ingest.json` (`songs.STATUS_PATH`, `ingest.Status`):
+pid, watching, a heartbeat every 2 s, the song in hand with its remaining steps and their expected
+seconds (`EXPECT_S`), the queue, the failures (not retried until the file changes), a count of songs
+finished. The game's `Importer` reads it (a dead pid or a heartbeat older than 10 s is "not running"),
+starts `nice -n 10 .venv-ingest/bin/python -m bathero.ingest --watch` in its own session (it outlives
+the game and a deploy), output appended to `~/Library/Logs/bathero/ingest.log`, and stops it with
+SIGTERM (the importer exits through its finally blocks: the step's process is killed, its temporary
+folder deleted, the status marked stopped). The **songs screen** (`SongsScreen`, the hub's rack tom,
+now opened even with no songs) says top right whether it runs ("importer: watching the inbox",
+"importing 2 songs", "off"); **the floor tom or I** turns it on and off, remembered in settings
+(`importer_on`: on, the game starts it at launch); the song in hand is a grey row with its step
+("transcribing the drums · 3/5 · 1:10") over a progress bar (steps weighted by `EXPECT_S`, a step
+never full until it ends), then the queued and the failed ones. `App.poll_importer` refreshes the
+list and toasts "song ready" when one finishes.
+
 **Sections** (asked for 2026-11-08): the importer's last step writes `sections.json` (re-run on
 songs made before it: `process` adds a missing sections.json when the inbox file is still there).
 Demucs `htdemucs` four stems on mps (All-In-One's own demucs-infer fails on mps, "mps:0 and cpu",

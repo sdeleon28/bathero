@@ -45,6 +45,7 @@ from . import songs as SG
 from .twister import Twister
 from . import launchpad as LP
 from . import songedit as SE
+from . import importer as IM
 from .ghost import GhostFilter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
                      menu_music_sound, output_devices, render_backing_track, render_count, render_metronome, MENU_CHANNEL)
@@ -140,6 +141,11 @@ class App:
         self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
         self.tempo_job = None        # (rate, thread) stretching the stems in the background
         self.refresh_songs()
+        self.importer = IM.Importer()         # the song importer's process (bathero.ingest --watch), on / off from the songs screen
+        self.importer_seen = None             # (its start, songs imported) last seen: a new song refreshes the list
+        self.importer_checked = 0.0
+        if self.settings.get("importer_on") and not self.importer.running:
+            self.importer.start()
         self.ghosts = GhostFilter()  # drops the hi-hat notes the pedal produces on its own
         self.runlog = RunLog()       # every level is written to ~/Library/Logs/bathero/runs when it ends
         self.recorder = Recorder(self.settings)   # V: take of the game, the interface's mix and the camera
@@ -457,6 +463,38 @@ class App:
         (the built-in levels, which every intro and uniqueness check walks)."""
         C.COURSE[SG.SONG_COURSE] = SG.course()
         return C.COURSE[SG.SONG_COURSE]
+
+    # --- the song importer (importer.py) -------------------------------------------------
+    def poll_importer(self):
+        """Once a second: a song the importer finished joins the list (and says so)."""
+        now = time.perf_counter()
+        if now - self.importer_checked < 1.0:
+            return
+        self.importer_checked = now
+        st = self.importer.status()
+        if not st.get("pid"):
+            return
+        seen = (st.get("started"), st.get("imported", 0))
+        if self.importer_seen is not None and seen[0] == self.importer_seen[0] and seen[1] > self.importer_seen[1]:
+            self.refresh_songs()
+            self.toasts.add(f"song ready: {st.get('last')}", JUDGE_COLORS["PERFECT"], key="importer")
+        self.importer_seen = seen
+
+    def toggle_importer(self):
+        """The importer on or off, remembered: on, it starts with the game until turned off."""
+        im = self.importer
+        if im.running or im.starting:
+            im.stop()
+            self.settings["importer_on"] = False
+            self.toasts.add("importer stopped", DIM, key="importer")
+        elif not im.available():
+            self.toasts.add("no importer: .venv-ingest is missing (see CLAUDE.md, Imported songs)", JUDGE_COLORS["MISS"], key="importer")
+            return
+        else:
+            im.start()
+            self.settings["importer_on"] = True
+            self.toasts.add("importer started: watching ~/Music/bathero/inbox", ACCENT, key="importer")
+        save_settings(self.settings)
 
     # --- song mixer (the Twister) ------------------------------------------------------
     SONG_GAINS = {"backing": ("song_backing", 1.0), "drums": ("song_drums", 0.3)}
@@ -1368,6 +1406,7 @@ class App:
             self.handle_device_events()
             self.poll_twister()
             self.poll_launchpad()
+            self.poll_importer()
             self.adopt_sounds()
             self.screen_obj.update()
             self.screen_obj.draw(self.surface, clock.get_fps())
@@ -1500,10 +1539,8 @@ class HubScreen(Screen):
         if cat == "hihat":
             self.app.go(CoursesScreen(self.app))
         elif cat == "tom1":
-            if not self.app.refresh_songs().levels:
-                self.app.toasts.add("no songs yet: drop a .wav in ~/Music/bathero/inbox and run the importer", DIM, key="songs")
-                return
-            self.app.go(ListScreen(self.app, SG.SONG_COURSE))
+            self.app.refresh_songs()
+            self.app.go(SongsScreen(self.app))
         else:
             self.app.go(ListScreen(self.app, cat))
 
@@ -1589,6 +1626,8 @@ class HubScreen(Screen):
                     line = f"{len(sc.levels)} song{'s' if len(sc.levels) != 1 else ''}  ·  ★ {got} / {total}"
                 else:
                     line = "none yet: ~/Music/bathero/inbox"
+                if self.app.importer.status().get("current"):
+                    line += "  ·  importing"
                 self.f.center(surf, line, self.f.small, color, y + ph - 26 * S, x + pw / 2)
             else:
                 self.f.center(surf, describe(self.app.kit), self.f.small, color, y + ph - 26 * S, x + pw / 2)
@@ -1836,8 +1875,13 @@ class ListScreen(Screen):
                 surf.blit(ts, (right - ts.get_width(), y + 4 * S))
                 right -= ts.get_width() + 12 * S
                 right -= draw_stars(surf, self.f, best.get("stars", 0), right, y + 2 * S, S, size="small") + 16 * S
-            surf.blit(self.f.text(self.fit(sub, right - (x + 500 * S)), self.f.small, DIM), (x + 500 * S, y + 4 * S))
+            note = self.row_note(name)
+            if note is not None:
+                self.progress_row(surf, x + 500 * S, y, right - (x + 500 * S), *note)
+            else:
+                surf.blit(self.f.text(self.fit(sub, right - (x + 500 * S)), self.f.small, DIM), (x + 500 * S, y + 4 * S))
             y += row_h
+        self.draw_more(surf, y, row_h, first + max_rows - len(items))
         if items:                                             # the selected one in full, two lines if it needs them
             lines = wrap(self.f, items[self.sel][1], self.f.small, self.w - 80 * S)[:2]
             for k, line in enumerate(lines):
@@ -1852,8 +1896,123 @@ class ListScreen(Screen):
             self.legend(surf, [("hihat", "down"), ("crash", "up"), ("snare", "select"), ("tom1", f"{what} R/L"), ("kick", "back")],
                         keys=f"arrows or j k · Enter or l · ← → {what} · Esc or h")
         else:
-            self.legend(surf, [("hihat", "down"), ("crash", "up"), ("snare", "select"), ("kick", "back")],
-                        keys="arrows or j k · Enter or l · Esc or h")
+            pairs, keys = self.legend_spec()
+            self.legend(surf, pairs, keys=keys)
+
+    # hooks for the songs screen (the importer's rows) -------------------------------------
+    def row_note(self, name):
+        """(label, fraction or None, colour) to show instead of a row's description, or None."""
+        return None
+
+    def draw_more(self, surf, y, row_h, rows_left):
+        """Rows after the items (the songs being imported)."""
+
+    def legend_spec(self):
+        return [("hihat", "down"), ("crash", "up"), ("snare", "select"), ("kick", "back")], "arrows or j k · Enter or l · Esc or h"
+
+    def progress_row(self, surf, x, y, w, label, frac, colour):
+        """A status label, over a progress bar when there is a fraction."""
+        S = self.s
+        if frac is not None:
+            bar = pygame.Rect(int(x), int(y + 22 * S), int(max(10 * S, w)), int(6 * S))
+            pygame.draw.rect(surf, LANE_BG, bar, border_radius=int(3 * S))
+            pygame.draw.rect(surf, colour, (bar.x, bar.y, int(bar.w * max(0.0, min(1.0, frac))), bar.h), border_radius=int(3 * S))
+        surf.blit(self.f.text(self.fit(label, w), self.f.small, colour), (x, y + (0 if frac is not None else 4) * S))
+
+
+def list_screen(app, cat, sel=0):
+    return SongsScreen(app, sel) if cat == SG.SONG_COURSE else ListScreen(app, cat, sel)
+
+
+class SongsScreen(ListScreen):
+    """The imported songs, and the importer: whether it runs (the floor tom or I turns it on and
+    off), the song in hand greyed with its step and a progress bar, the queue, the failures."""
+
+    def __init__(self, app, sel=0):
+        super().__init__(app, SG.SONG_COURSE, sel)
+        self.seen = None
+        self.update()
+
+    def update(self):
+        if self.app.importer_seen != self.seen or self.seen is None:     # a song finished: the list grew
+            self.seen = self.app.importer_seen
+            self.course = C.COURSE.get(SG.SONG_COURSE)
+            got, total = self.app.course_stars(self.course)
+            n = len(self.course.levels)
+            self.sub = f"{n} song{'s' if n != 1 else ''}  ·  ★ {got} / {total}"
+
+    def pending(self):
+        """[(title, label, fraction or None, colour)] for the songs the importer has not finished."""
+        im = self.app.importer
+        st = im.status()
+        listed = {ch.name for ch in self.app.items_for(self.cat)}
+        out = []
+        cur = im.current()
+        if cur is not None and f"♪ {cur[0]}" not in listed:
+            t = int(cur[3])
+            out.append((cur[0], f"{cur[1]} · {t // 60}:{t % 60:02d}", cur[2], ACCENT))
+        for title in st.get("queue", []):
+            if (cur is None or title != cur[0]) and f"♪ {title}" not in listed:
+                out.append((title, "queued", None, DIM))
+        for title, why in st.get("failed", {}).items():
+            if f"♪ {title}" not in listed:
+                out.append((title, f"failed: {why}", None, JUDGE_COLORS["MISS"]))
+        return out
+
+    def row_note(self, name):
+        cur = self.app.importer.current()
+        if cur is not None and name == f"♪ {cur[0]}":
+            t = int(cur[3])
+            return f"{cur[1]} · {t // 60}:{t % 60:02d}", cur[2], ACCENT
+        return None
+
+    def draw_more(self, surf, y, row_h, rows_left):
+        S = self.s
+        x = self.w * 0.12
+        for title, label, frac, colour in self.pending()[:max(0, rows_left)]:
+            shown = f"♪ {title}"
+            surf.blit(self.f.text(shown if len(shown) <= 34 else shown[:33] + "…", self.f.mid, DIM), (x, y))
+            self.progress_row(surf, x + 500 * S, y, self.w * 0.88 - (x + 500 * S), label, frac, colour)
+            y += row_h
+
+    def draw(self, surf, fps):
+        super().draw(surf, fps)
+        S, im = self.s, self.app.importer
+        st = im.status()
+        if im.running and st.get("current"):
+            n = 1 + len([q for q in st.get("queue", []) if q != st["current"]["title"]])
+            text, colour = f"importer: importing {n} song{'s' if n > 1 else ''}", ACCENT
+        elif im.running:
+            text, colour = "importer: watching the inbox" if im.watching else "importer: running", JUDGE_COLORS["PERFECT"]
+        elif im.starting:
+            text, colour = "importer: starting", ACCENT
+        else:
+            text, colour = "importer: off", DIM
+        ts = self.f.text(text, self.f.small, colour)
+        rx = self.w * 0.88 - ts.get_width()
+        surf.blit(ts, (rx, 28 * S))
+        on = im.running or im.starting
+        pygame.draw.circle(surf, colour, (int(rx - 12 * S), int(28 * S + ts.get_height() / 2)), int(5 * S), 0 if on else 1)
+        if not self.items() and not self.pending():
+            self.f.center(surf, "no songs yet: drop a .wav into ~/Music/bathero/inbox" +
+                          ("" if on else ", then turn the importer on (floor tom or I)"), self.f.mid, DIM, 200 * S)
+
+    def legend_spec(self):
+        on = self.app.importer.running or self.app.importer.starting
+        return ([("hihat", "down"), ("crash", "up"), ("snare", "select"), ("floor", f"importer {'off' if on else 'on'}"), ("kick", "back")],
+                "arrows or j k · Enter or l · I importer on / off · Esc or h")
+
+    def on_drum(self, inst):
+        if inst == "floor":
+            self.app.toggle_importer()
+            return True
+        return super().on_drum(inst)
+
+    def on_key(self, key):
+        if key == pygame.K_i:
+            self.app.toggle_importer()
+            return True
+        return super().on_key(key)
 
 
 class CoursesScreen(ListScreen):
@@ -3443,7 +3602,7 @@ class PlayScreen(Screen):
             self.app.rate = 1.0
             self.app.go(CoachScreen(self.app))
             return
-        self.app.go(ListScreen(self.app, self.cat, self.index))
+        self.app.go(list_screen(self.app, self.cat, self.index))
 
     def retry(self):
         self.leave()
@@ -3458,7 +3617,7 @@ class PlayScreen(Screen):
         if nxt < len(self.app.items_for(self.cat)):
             self.app.go(PlayScreen(self.app, self.cat, nxt))
         else:
-            self.app.go(ListScreen(self.app, self.cat, self.index))
+            self.app.go(list_screen(self.app, self.cat, self.index))
 
     def leave(self):
         if self.editor is not None:

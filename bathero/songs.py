@@ -15,6 +15,8 @@ from .chart import Chart, ChartNote, Course
 INBOX = os.path.expanduser("~/Music/bathero/inbox")
 SONGS_DIR = os.path.expanduser("~/Music/bathero/songs")
 SONG_COURSE = "course:songs"
+# what the importer is doing (bathero.ingest writes it, bathero.importer reads it for the songs screen)
+STATUS_PATH = os.path.expanduser("~/.config/bathero/ingest.json")
 SR = 44100
 SLOWER_BPM = 126          # the Twister's tempo knob goes from the song's tempo down to this much slower
 MIN_RATE = 0.3            # ... but never under the game's slowest rate

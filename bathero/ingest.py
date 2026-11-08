@@ -19,19 +19,26 @@ crash or a new step reruns only what is missing):
                              bars after they end the outro (its own vocals stem says so)
 
 A song made before a step existed gets that step on the next run (the file in the inbox stays).
+
+While it runs it keeps ~/.config/bathero/ingest.json (songs.STATUS_PATH) up to date for the game's
+songs screen: its pid and whether it watches, a heartbeat every 2 s, the song and the step in hand
+(with the steps it still has to take), the queue, the failures, and a count of songs finished.
+SIGTERM (the game's toggle) stops it cleanly: the step's process is killed and its temporary files go.
 """
 import argparse
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
 
 import mido
 
-from .songs import INBOX, SONGS_DIR
+from .songs import INBOX, SONGS_DIR, STATUS_PATH
 
 VENV_BIN = os.path.dirname(sys.executable)
 AUDIO_EXT = (".wav", ".aif", ".aiff", ".flac", ".mp3", ".m4a")
@@ -41,6 +48,68 @@ ADTOF_KEYS = {35: "kick", 36: "kick", 38: "snare", 40: "snare", 47: "tom1", 42: 
 VOCAL_SILENT_DB = -50  # a bar of the vocals stem under this has nobody singing
 SNAP_MS = 35          # a note this close to a sixteenth (or a triplet eighth) of the song's grid lands on it
 DEDUPE_MS = 40        # one instrument heard twice this close is one stroke
+
+
+STEPS = {"separate": "separating the drums", "beats": "finding the beats", "transcribe": "transcribing the drums",
+         "chart": "writing the chart", "sections": "finding the sections"}
+EXPECT_S = {"separate": 40, "beats": 15, "transcribe": 30, "chart": 2, "sections": 100}   # for the progress bar
+
+
+class Status:
+    """The status file: written whole (atomically) on every change and every 2 s."""
+
+    def __init__(self, watching):
+        self.lock = threading.Lock()
+        self.d = {"pid": os.getpid(), "watching": watching, "started": time.time(), "inbox": INBOX,
+                  "current": None, "queue": [], "failed": {}, "imported": 0, "last": None}
+        self.write()
+        threading.Thread(target=self._beat, daemon=True).start()
+
+    def _beat(self):
+        while self.d["pid"]:
+            time.sleep(2)
+            self.write()
+
+    def write(self, **kw):
+        with self.lock:
+            self.d.update(kw)
+            self.d["updated"] = time.time()
+            try:
+                os.makedirs(os.path.dirname(STATUS_PATH), exist_ok=True)
+                with open(STATUS_PATH + ".part", "w") as f:
+                    json.dump(self.d, f)
+                os.replace(STATUS_PATH + ".part", STATUS_PATH)
+            except OSError:
+                pass
+
+    def begin(self, title, song, steps):
+        self.write(current={"title": title, "song": song, "steps": steps, "expect": [EXPECT_S[s] for s in steps],
+                            "step": None, "label": "starting", "step_started": time.time(), "started": time.time()},
+                   queue=[q for q in self.d["queue"] if q != title])
+
+    def step(self, key):
+        cur = self.d["current"]
+        if cur is not None and key in cur["steps"]:
+            self.write(current=dict(cur, step=cur["steps"].index(key), label=STEPS[key], step_started=time.time()))
+
+    def done(self, title):
+        self.d["failed"].pop(title, None)
+        self.write(current=None, imported=self.d["imported"] + 1, last=title)
+
+    def fail(self, title, why):
+        self.d["failed"][title] = why[-300:]
+        self.write(current=None)
+
+    def close(self):
+        self.write(pid=None, watching=False, current=None, queue=[])
+
+
+STATUS = None          # the running importer's Status
+
+
+def report(key):
+    if STATUS is not None:
+        STATUS.step(key)
 
 
 def slug(name):
@@ -56,6 +125,7 @@ def run(cmd):
 def separate(src, out):
     if os.path.exists(os.path.join(out, "drums.wav")) and os.path.exists(os.path.join(out, "backing.wav")):
         return
+    report("separate")
     tmp = os.path.join(out, "_demucs")
     run([os.path.join(VENV_BIN, "python"), "-m", "demucs", "-n", "htdemucs_ft", "--two-stems", "drums",
          "-d", "mps", "-o", tmp, "--filename", "{stem}.{ext}", src])
@@ -71,6 +141,7 @@ def separate(src, out):
 def track_beats(src, out):
     path = os.path.join(out, "beats.txt")
     if not os.path.exists(path):
+        report("beats")
         run([os.path.join(VENV_BIN, "beat_this"), src, "-o", path])
     beats = []
     for line in open(path):
@@ -83,6 +154,7 @@ def track_beats(src, out):
 def transcribe(out):
     path = os.path.join(out, "drums.mid")
     if not os.path.exists(path):
+        report("transcribe")
         run([os.path.join(VENV_BIN, "adtof"), "--audio", os.path.join(out, "drums.wav"), "--out", path, "--device", "cpu"])
     t, notes = 0.0, []
     for msg in mido.MidiFile(path):
@@ -166,6 +238,7 @@ def find_sections(src, out):
     path = os.path.join(out, "sections.json")
     if os.path.exists(path):
         return
+    report("sections")
     song = json.load(open(os.path.join(out, "song.json")))
     bars = bar_starts(song)
     tmp = os.path.join(out, "_allin1")
@@ -201,13 +274,31 @@ def find_sections(src, out):
     print("[ingest] sections: " + "  ".join(f"{lab} {i + 1}" for i, lab in sections), flush=True)
 
 
+def todo(src):
+    """The steps a file in the inbox still needs (none: the song is complete)."""
+    out = os.path.join(SONGS_DIR, slug(os.path.splitext(os.path.basename(src))[0]))
+    have = lambda f: os.path.exists(os.path.join(out, f))
+    if have("song.json"):
+        return [] if have("sections.json") else ["sections"]
+    steps = [] if have("drums.wav") and have("backing.wav") else ["separate"]
+    steps += [] if have("beats.txt") else ["beats"]
+    steps += [] if have("drums.mid") else ["transcribe"]
+    return steps + ["chart", "sections"]
+
+
 def process(src):
     title = os.path.splitext(os.path.basename(src))[0]
     out = os.path.join(SONGS_DIR, slug(title))
+    steps = todo(src)
+    if not steps:
+        return out
+    if STATUS is not None:
+        STATUS.begin(title, slug(title), steps)
     if os.path.exists(os.path.join(out, "song.json")):
-        if not os.path.exists(os.path.join(out, "sections.json")):
-            print(f"[ingest] {title}: sections", flush=True)
-            find_sections(src, out)
+        print(f"[ingest] {title}: sections", flush=True)
+        find_sections(src, out)
+        if STATUS is not None:
+            STATUS.done(title)
         return out
     os.makedirs(out, exist_ok=True)
     print(f"[ingest] {title}", flush=True)
@@ -215,11 +306,14 @@ def process(src):
     separate(src, out)
     beats = track_beats(src, out)
     notes = transcribe(out)
+    report("chart")
     song = build_chart(title, beats, notes)
     song["source"] = os.path.basename(src)
     with open(os.path.join(out, "song.json"), "w") as f:
         json.dump(song, f, ensure_ascii=False)
     find_sections(src, out)
+    if STATUS is not None:
+        STATUS.done(title)
     counts = {}
     for _, k, _ in song["notes"]:
         counts[k] = counts.get(k, 0) + 1
@@ -234,14 +328,27 @@ def stable(path, wait=2.0):
     return os.path.exists(path) and os.path.getsize(path) == a
 
 
+FAILED = {}           # path -> mtime of a file that failed in this run: not retried until it changes
+
+
 def scan():
-    for name in sorted(os.listdir(INBOX)):
-        p = os.path.join(INBOX, name)
-        if name.lower().endswith(AUDIO_EXT) and not name.startswith(".") and stable(p, 0.5):
-            try:
-                process(p)
-            except subprocess.CalledProcessError as e:
-                print(f"[ingest] FAILED {name}: {e.stderr.decode(errors='replace')[-800:]}", flush=True)
+    files = [os.path.join(INBOX, n) for n in sorted(os.listdir(INBOX))
+             if n.lower().endswith(AUDIO_EXT) and not n.startswith(".")]
+    files = [p for p in files if todo(p) and FAILED.get(p) != os.path.getmtime(p)]
+    if STATUS is not None:
+        STATUS.write(queue=[os.path.splitext(os.path.basename(p))[0] for p in files])
+    for p in files:
+        name = os.path.basename(p)
+        if not stable(p, 0.5):
+            continue
+        try:
+            process(p)
+        except Exception as e:
+            why = e.stderr.decode(errors="replace") if isinstance(e, subprocess.CalledProcessError) and e.stderr else repr(e)
+            print(f"[ingest] FAILED {name}: {why[-800:]}", flush=True)
+            FAILED[p] = os.path.getmtime(p)
+            if STATUS is not None:
+                STATUS.fail(os.path.splitext(name)[0], why.strip().splitlines()[-1] if why.strip() else "failed")
 
 
 def watch():
@@ -276,13 +383,20 @@ def main(argv=None):
     a = ap.parse_args(argv)
     os.makedirs(INBOX, exist_ok=True)
     os.makedirs(SONGS_DIR, exist_ok=True)
-    if a.files:
-        for f in a.files:
-            process(os.path.abspath(f))
-    elif a.watch:
-        watch()
-    else:
-        scan()
+    global STATUS
+    STATUS = Status(watching=a.watch)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))      # finally blocks run, the step's process dies
+    try:
+        if a.files:
+            for f in a.files:
+                process(os.path.abspath(f))
+        elif a.watch:
+            watch()
+        else:
+            scan()
+    finally:
+        STATUS.close()
+        print("[ingest] stopped", flush=True)
 
 
 if __name__ == "__main__":
