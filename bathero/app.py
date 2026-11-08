@@ -5,6 +5,7 @@ inside a section the hi-hat moves down, the crash moves up, the snare accepts
 and the kick goes back. The keyboard always works too.
 """
 import argparse
+import math
 import os
 import sys
 import threading
@@ -35,7 +36,7 @@ from . import latency as LA
 from . import coach as CO
 from .devices import DeviceWatcher, Toasts, TOAST_S
 from .render import ACCENT, BG, DIM, JUDGE_COLORS, LANE_BG, TEXT, Fonts, Renderer, draw_hihat_state, draw_stars, lerp
-from .game import TAIL_S, lead_in_for
+from .game import SONG_COUNT, SONG_COUNT_BEATS, TAIL_S, lead_in_for_chart
 from . import ghost as GH
 from . import intro as IN
 from . import keygen
@@ -45,7 +46,7 @@ from . import launchpad as LP
 from . import songedit as SE
 from .ghost import GhostFilter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
-                     menu_music_sound, output_devices, render_backing_track, render_metronome, MENU_CHANNEL)
+                     menu_music_sound, output_devices, render_backing_track, render_count, render_metronome, MENU_CHANNEL)
 from . import sounds as SND
 
 TARGET_FPS = 240
@@ -683,7 +684,7 @@ class App:
         for this chart, on its timeline from -lead_in. Cached per chart and metronome mode."""
         if not self.sounds.ok:
             return {}
-        lead_in = lead_in_for(chart.bpm)
+        lead_in = lead_in_for_chart(chart)
         total = chart.length + TAIL_S + 0.5
         out = {}
         if chart.song:
@@ -695,6 +696,11 @@ class App:
                     self.track_cache[key] = Track(SG.audio(chart.song, name, chart.rate), t0)
                 self.track_cache[key].gain = self.SONG_BASE_GAIN * self.song_gain(name)
                 out[name] = self.track_cache[key]
+            # the count, 1 . 3 . | 1 2 3 4, its own track so the metronome's mode and level never mute it
+            key = ("count", chart.song, round(chart.bpm, 3))
+            if key not in self.track_cache:
+                self.track_cache[key] = Track(render_count(chart, lead_in, SONG_COUNT_BEATS, SONG_COUNT), -lead_in, METRONOME_GAIN)
+            out["count"] = self.track_cache[key]
         elif prog_index is not None:
             # triplet and sextuplet levels get the shuffle arrangement: the music must confirm the subdivision;
             # a level with a style of its own (the cumbias) names it
@@ -712,7 +718,8 @@ class App:
         if self.metronome_mode != "off":
             key = ("metro", chart.name, round(chart.bpm, 3), self.metronome_mode)
             if key not in self.track_cache:
-                self.track_cache[key] = Track(render_metronome(chart, lead_in, total, self.metronome_mode), -lead_in, METRONOME_GAIN)
+                data = render_metronome(chart, lead_in, total, self.metronome_mode, count=not chart.song)
+                self.track_cache[key] = Track(data, -lead_in, METRONOME_GAIN)
             self.track_cache[key].gain = METRONOME_GAIN * self.metro_volume
             out["metronome"] = self.track_cache[key]
         return out
@@ -3297,12 +3304,18 @@ class PlayScreen(Screen):
             self.phrase_jump(self.app.loop_range[0])
 
     def bar_jump(self, bar):
-        """Jump to the start of bar `bar` (0-based) with the phrase keys' bar of run-up."""
+        """Jump to the start of bar `bar` (0-based) with the phrase keys' bar of run-up; a
+        song's count bars (-2, -1) are their own run-up: the count from there."""
         if self.editor is not None:
-            self.editor.view_bar(bar)
+            self.editor.view_bar(max(0, bar))
             return
         ch = self.chart
         t = ch.beat_time(bar * 4)
+        if bar < 0:
+            self.game.seek(t, 0.0)
+            self.app.toasts.add("the count", ACCENT, key="phrase")
+            self.app.runlog.add("seek", bar=bar + 1, chart_t=round(t, 4))
+            return
         self.game.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
         self.app.toasts.add(ch.place(t), ACCENT, key="phrase")
         self.app.runlog.add("seek", bar=bar + 1, chart_t=round(t, 4))
@@ -3388,11 +3401,12 @@ class PlayScreen(Screen):
                 if self.armed and self.editor is None:
                     self.start(by="launchpad")
                 self.bar_jump(r[1])
-            elif r[0] == "loop":
-                self.set_bar_loop(*r[1])
+            elif r[0] == "loop" and r[1][1] > 0:
+                self.set_bar_loop(max(0, r[1][0]), r[1][1])           # a loop never takes the count
 
     def launchpad_frame(self):
         ch, g, ex = self.chart, self.game, self.app.lp_explorer
+        lead = SONG_COUNT_BEATS // 4 if ch.song else 0
         colours = getattr(self, "_lp_colours", None)
         if colours is None:
             colours = self._lp_colours = [LP.PHRASE_COLORS[(ch.phrase_at(ch.beat_time(i * 4)) or 0) % len(LP.PHRASE_COLORS)]
@@ -3404,11 +3418,13 @@ class PlayScreen(Screen):
             if g.count_in_end is not None and t < g.count_in_end:
                 t = g.count_in_end                        # the run-up of a jump: where it lands, as the screen shows
             bar = int(ch.beat_pos(max(t, 0.0)) // 4 + 1e-6)
+            if ch.song and t < 0:                          # the count's own pads
+                bar = max(-lead, int(math.floor(ch.beat_pos(t) / 4 + 1e-6)))
         span = self.loop_span()
         loop_bars = None
         if span is not None:
             loop_bars = (int(round(ch.beat_pos(span[0]) / 4)), int(round(ch.beat_pos(span[1]) / 4)))
-        ex.grid(colours, loop_bars, bar, ch.key)
+        ex.grid(colours, loop_bars, bar, ch.key, lead)
         return ex.frame(playing, self.app.loop_on and span is not None)
 
     def to_list(self):

@@ -378,6 +378,16 @@ either as times, which the renderer draws); side MUTE toggles the loop, side STO
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
 
+**A song counts itself in** (asked for 2026-11-08): two bars before chart time 0, on the song's
+own beat grid (`game.lead_in_for_chart`: `-beat_time(-8)`, the first beat interval extrapolated),
+congas on 1 and 3 of the first bar and on every beat of the second (`SONG_COUNT`,
+`sounds.render_count`), as their own track "count" so the metronome's mode and level never mute
+it; a song's metronome starts at bar 1 (`render_metronome(count=False)`). The screen shows the
+counted digit (held, dimmed, over a beat not counted). On the Launchpad the two count bars are the
+first two pads, orange (`LP.COUNT_COLOR` 9, out of `PHRASE_COLORS` and of the section colours),
+one pad each at any zoom; a pad there starts the count from that bar, a jump to bar 1 runs up
+through the count's 1 2 3 4, and the loop gesture never takes the count.
+
 **Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **E** on the play screen of an
 imported song (paused, or it pauses; from the intro card too) opens the editor over the highway;
 the game stays paused and the view is the paused playhead (`Game.seek(t, 0)`), so the wheel, the

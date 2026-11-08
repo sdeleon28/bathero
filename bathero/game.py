@@ -91,6 +91,18 @@ def dynamic_for(accent: bool, velocity: int, instrument: str = None, night: bool
     return "TAP" if velocity <= tap_max else "LOUD" if velocity >= accent_min else None
 
 
+SONG_COUNT_BEATS = 8           # an imported song starts with two bars of count: 1 . 3 . | 1 2 3 4
+SONG_COUNT = (0, 2, 4, 5, 6, 7)   # the counted beats of those eight
+
+
+def lead_in_for_chart(chart) -> float:
+    """The count-in before chart time 0: two bars on a song's own beat grid (its first beat
+    interval, extrapolated), else lead_in_for(bpm)."""
+    if chart.song:
+        return -chart.beat_time(-SONG_COUNT_BEATS)
+    return lead_in_for(chart.bpm)
+
+
 def lead_in_for(bpm: float) -> float:
     """Count-in: one bar of four beats, two bars if that is under two seconds."""
     beat = 60 / bpm
@@ -116,7 +128,7 @@ class Game:
         self.sounds = sounds
         self.guide = guide
         self.beat = 60 / chart.bpm
-        self.lead_in = lead_in_for(chart.bpm)
+        self.lead_in = lead_in_for_chart(chart)
         self.lock = threading.Lock()
         self.reset()
 

@@ -6,7 +6,7 @@ import time
 import pygame
 
 from .chart import COUNT_LABELS, HH_GLYPH, PHRASE_KEYS, art_goal
-from .game import CONTRAST_TARGET, Game
+from .game import CONTRAST_TARGET, SONG_COUNT, SONG_COUNT_BEATS, Game
 from .ghost import PEDAL_CLOSED_CC, openness_label
 
 LOOKAHEAD_S = 2.0        # seconds of chart visible above the line at speed 1.0
@@ -471,6 +471,12 @@ class Renderer:
             f.center(surf, "PAUSED", f.huge, TEXT, self.h * 0.45)
             f.center(surf, "space resume · R restart · Esc menu" + (" · E edit the song" if g.chart.song else ""),
                      f.small, DIM, self.h * 0.45 + 70 * S)
+        elif now < 0 and g.chart.song:
+            # a song counts itself in: 1 . 3 . | 1 2 3 4, the digit held over the beat not counted
+            i = max(0, min(SONG_COUNT_BEATS - 1, int(math.floor(g.chart.beat_pos(now))) + SONG_COUNT_BEATS))
+            beat = max(k for k in SONG_COUNT if k <= i)
+            f.center(surf, str(beat % 4 + 1), f.huge, TEXT if beat == i else DIM, self.h * 0.45)
+            f.center(surf, g.chart.desc, f.mid, DIM, self.h * 0.45 + 80 * S)
         elif now < 0:
             beats_left = math.ceil(-now / g.beat)
             f.center(surf, str((beats_left - 1) % 4 + 1), f.huge, TEXT, self.h * 0.45)

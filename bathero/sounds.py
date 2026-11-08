@@ -929,12 +929,25 @@ def _mix_events(events, total_s, drive=None):
     return out.astype(np.float32)
 
 
-def render_metronome(chart, lead_in_s, total_s, mode="full"):
+def render_count(chart, lead_in_s, beats, counted):
+    """A song's count-in: congas on the `counted` beats of the `beats` before chart time 0
+    (the downbeats low), nothing else."""
+    hits = {k: METRO_HITS[k]() for k in ("low", "mid")}
+    events = []
+    for k in counted:
+        i = k - beats
+        kind = "low" if i % 4 == 0 else "mid"
+        events.append((chart.beat_time(i) + lead_in_s, hits[kind], METRO_LEVELS[kind]))
+    return _mix_events(events, lead_in_s + 0.6, METRO_DRIVE)
+
+
+def render_metronome(chart, lead_in_s, total_s, mode="full", count=True):
     """Congas for every bar from the count-in to total_s (chart time), on the chart's own
-    beat grid (constant tempo or a song's tracked beats). mode: full / beats."""
+    beat grid (constant tempo or a song's tracked beats). mode: full / beats. count=False starts
+    at chart time 0 (a song counts itself in, render_count)."""
     hits = {k: f() for k, f in METRO_HITS.items()}
     events = []
-    first_beat = int(round(chart.beat_pos(-lead_in_s)))
+    first_beat = int(round(chart.beat_pos(-lead_in_s))) if count else 0
     last_beat = int(chart.beat_pos(total_s)) + 1
     for i in range(first_beat, last_beat):
         t0 = chart.beat_time(i)

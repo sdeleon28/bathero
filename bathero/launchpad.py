@@ -10,7 +10,9 @@ kept in ~/.config/bathero/twister_bank, since a relaunch of the game does not he
 
 The controls are GroupCtl's project explorer (baseexplorer, normalexplorer), on the level instead
 of the arranger: the 64 pads are the level's bars in reading order from the top left, each bar
-coloured by its phrase (the number keys' phrases), a pad merging up to N bars of one phrase.
+coloured by its phrase (the number keys' phrases), a pad merging up to N bars of one phrase. A
+song's two bars of count-in (1 . 3 . | 1 2 3 4) come first, one orange pad each at any zoom: a
+pad there starts the count from that bar.
 
     pad              jump there (one bar of run-up, like the number keys)
     SESSION / USER 1 zoom out / in: 1, 2, 4 .. 32 bars a pad; auto-fit (the finest that fits one
@@ -47,7 +49,9 @@ RESOLUTIONS = (1, 2, 4, 8, 16, 32)
 # GroupCtl's ExplorerColors (raw MK2 palette indices)
 WHITE, RESOLUTION_COLOR, PAGE_COLOR, SELECT_COLOR, STOP_COLOR, LOOP_COLOR = 3, 41, 49, 5, 7, 41
 # one per phrase (ten at most), neighbours far apart; GroupCtl colours by the marker instead
-PHRASE_COLORS = [45, 21, 9, 53, 37, 13, 29, 57, 49, 17]
+PHRASE_COLORS = [45, 21, 57, 53, 37, 13, 29, 49, 17, 25]
+# a song's two bars of count-in, ahead of bar 1: orange, which no phrase (and no section) uses
+COUNT_COLOR = 9
 
 
 def read_bank():
@@ -219,20 +223,24 @@ class Explorer:
         self.selecting = False
         return ("loop", (lo, hi))
 
-    def grid(self, colours, loop_bars, playing_bar, level):
+    def grid(self, colours, loop_bars, playing_bar, level, lead=0):
         """colours: one per bar of the level; loop_bars: (first, end) or None; playing_bar: the bar
-        under the playhead while playing, else None. Returns the page's 64 slots (None = empty)."""
+        under the playhead while playing, else None; lead: bars of count-in ahead of bar 0 (a song's
+        two), one pad each whatever the zoom, bars -lead..-1. Returns the page's 64 slots (None = empty)."""
         bars = len(colours)
         if level != self.level:
             self.level = level
             if not self.overridden:
-                self.bpp = self.fit(bars)
+                self.bpp = self.fit(bars + lead)
             self.page = 0
 
         def inside(span, a, b):
             return span is not None and a < span[1] and b > span[0]
 
-        blocks, i = [], 0
+        blocks = [{"bars": (i, i + 1), "colour": COUNT_COLOR,
+                   "selected": inside(self.anchor, i, i + 1),
+                   "playing": playing_bar == i} for i in range(-lead, 0)]
+        i = 0
         while i < bars:
             j = i + 1
             while j < bars and j - i < self.bpp and colours[j] == colours[i]:
