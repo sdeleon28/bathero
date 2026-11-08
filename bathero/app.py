@@ -69,7 +69,15 @@ def note_name(note):
 KEY_LANES = {pygame.K_1: 0,   # 1..9, 0 -> 0..9: the transport's phrases, the wizard's pads
              pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4,
              pygame.K_6: 5, pygame.K_7: 6, pygame.K_8: 7, pygame.K_9: 8, pygame.K_0: 9}
-MODULE_HINTS = ("td-", "td1", "td2", "td5", "alesis", "nitro", "strike", "dtx", "roland", "drum")
+MODULE_HINTS = ("td-", "td1", "td2", "td5", "alesis", "nitro", "strike", "dtx", "roland", "drum")   # most specific first
+MODULE_EXCLUDE = ("piano", "fp-", "keyboard", "twister", "launchpad", "hhmapper")   # Roland makes pianos too (2026-11-08: the game sat on "Roland Digital Piano")
+
+
+def find_module(names, hints=MODULE_HINTS):
+    """The drum module among the MIDI inputs: the first hint that matches anything wins, so
+    "TD-17" beats "Roland Digital Piano" whatever order CoreMIDI lists them in."""
+    ok = [n for n in names if not any(x in n.lower() for x in MODULE_EXCLUDE)]
+    return next((n for h in hints for n in ok if h in n.lower()), None)
 
 # What each drum does inside a list. The hub uses the drums as section buttons instead.
 NAV = {"snare": "accept", "kick": "back", "hihat": "next", "crash": "prev", "crash2": "prev",
@@ -79,8 +87,10 @@ CATEGORIES = [
     ("kick", "Exercises", "one drum at a time, slow"),
     ("snare", "Beats", "full grooves"),
     ("hihat", "Courses", "a genre's grooves and fills, in order"),
+    ("tom1", "Songs", "your songs, split and transcribed"),
     ("crash", "Setup", "kit, sounds, quit"),
 ]
+HUB_ROWS = [[0, 1, 2], [3, 4]]      # the hub's five cards: three on top, two wider ones under them
 
 
 class App:
@@ -686,10 +696,7 @@ class App:
             else:
                 name = matches[0]
         else:
-            for n in names:
-                if any(h in n.lower() for h in MODULE_HINTS):
-                    name = n
-                    break
+            name = find_module(names)
         if name:
             self.midi_in = mido.open_input(name, callback=self.on_midi)
             self.midi_name = name
@@ -1413,7 +1420,8 @@ class Screen:
 
 # ---------------------------------------------------------------------------
 class HubScreen(Screen):
-    """Four colored sections, one per drum. Strike the drum to open its section."""
+    """Five colored sections, one per drum (the rack tom opens the songs), three on top and two
+    under them. Strike the drum to open its section."""
 
     def __init__(self, app, sel=0):
         super().__init__(app)
@@ -1423,7 +1431,15 @@ class HubScreen(Screen):
     def open(self, i):
         cat = CATEGORIES[i][0]
         self.flash = (time.perf_counter(), i)
-        self.app.go(CoursesScreen(self.app) if cat == "hihat" else ListScreen(self.app, cat))
+        if cat == "hihat":
+            self.app.go(CoursesScreen(self.app))
+        elif cat == "tom1":
+            if not self.app.refresh_songs().levels:
+                self.app.toasts.add("no songs yet: drop a .wav in ~/Music/bathero/inbox and run the importer", DIM, key="songs")
+                return
+            self.app.go(ListScreen(self.app, SG.SONG_COURSE))
+        else:
+            self.app.go(ListScreen(self.app, cat))
 
     def on_drum(self, inst):
         for i, (cat, _, _) in enumerate(CATEGORIES):
@@ -1434,12 +1450,18 @@ class HubScreen(Screen):
     def on_key(self, key):
         if key in (pygame.K_ESCAPE, pygame.K_q):
             return False
-        if key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+        if pygame.K_1 <= key < pygame.K_1 + len(CATEGORIES):
             self.open(key - pygame.K_1)
-        elif key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_h, pygame.K_l):
-            self.sel ^= 1
+        elif key in (pygame.K_LEFT, pygame.K_h):
+            self.sel = (self.sel - 1) % len(CATEGORIES)
+        elif key in (pygame.K_RIGHT, pygame.K_l):
+            self.sel = (self.sel + 1) % len(CATEGORIES)
         elif key in (pygame.K_UP, pygame.K_DOWN, pygame.K_k, pygame.K_j):
-            self.sel ^= 2
+            # the other row, under / over the card's middle
+            r = 0 if self.sel in HUB_ROWS[0] else 1
+            frac = (HUB_ROWS[r].index(self.sel) + 0.5) / len(HUB_ROWS[r])
+            other = HUB_ROWS[1 - r]
+            self.sel = other[min(len(other) - 1, int(frac * len(other)))]
         elif key in (pygame.K_RETURN, pygame.K_SPACE):
             self.open(self.sel)
         elif key == pygame.K_s:
@@ -1463,12 +1485,13 @@ class HubScreen(Screen):
             stars = sum(v.get("stars", 0) for v in self.app.results.values())
             surf.blit(self.f.text(f"★ {stars}  ·  Setup ▸ Profile to log out", self.f.small, DIM), (90 * S, 66 * S))
         gap, top, bottom, side = 18 * S, 118 * S, self.h - 70 * S, 60 * S
-        pw = (self.w - 2 * side - gap) / 2
         ph = (bottom - top - gap) / 2
         now = time.perf_counter()
         for i, (cat, title, sub) in enumerate(CATEGORIES):
-            col, row = i % 2, i // 2
-            x, y = side + col * (pw + gap), top + row * (ph + gap)
+            row = 0 if i in HUB_ROWS[0] else 1
+            cols = HUB_ROWS[row]
+            pw = (self.w - 2 * side - gap * (len(cols) - 1)) / len(cols)
+            x, y = side + cols.index(i) * (pw + gap), top + row * (ph + gap)
             color = C.COLORS[cat]
             hot = max(0.0, 1 - (now - self.app.legend_flash.get(cat, 0)) / 0.3)
             fill = lerp(lerp(LANE_BG, color, 0.14), color, 0.5 * hot)
@@ -1480,8 +1503,11 @@ class HubScreen(Screen):
             pygame.draw.circle(surf, color, (int(x + 34 * S), int(y + 34 * S)), int(12 * S))
             surf.blit(self.f.text(f"{C.LABELS[cat]}", self.f.mid, color), (x + 56 * S, y + 20 * S))
             surf.blit(self.f.text(f"key {i + 1}", self.f.small, DIM), (x + pw - 70 * S, y + 24 * S))
-            self.f.center(surf, title, self.f.big, TEXT, y + ph / 2 - 6 * S, x + pw / 2)
-            self.f.center(surf, sub, self.f.small, DIM, y + ph / 2 + 36 * S, x + pw / 2)
+            room = pw - 28 * S                     # three cards a row: a long title or subtitle must fit
+            tf = self.f.big if self.f.text(title, self.f.big, TEXT).get_width() <= room else self.f.mid
+            self.f.center(surf, title, tf, TEXT, y + ph / 2 - 6 * S, x + pw / 2)
+            for k, line in enumerate(wrap(self.f, sub, self.f.small, room)[:2]):
+                self.f.center(surf, line, self.f.small, DIM, y + ph / 2 + (36 + 20 * k) * S, x + pw / 2)
             if cat in ("kick", "snare"):
                 items = self.app.items_for(cat)
                 keys = [ch.key for ch in items] + [ch.mirrored().key for ch in items if ch.lead]   # both leads count
@@ -1490,6 +1516,14 @@ class HubScreen(Screen):
             elif cat == "hihat":
                 got, total = (sum(v) for v in zip(*(self.app.course_stars(c) for c in COURSES)))
                 self.f.center(surf, f"{len(COURSES)} course{'s' if len(COURSES) != 1 else ''}  ·  ★ {got} / {total}", self.f.small, color, y + ph - 26 * S, x + pw / 2)
+            elif cat == "tom1":
+                sc = C.COURSE.get(SG.SONG_COURSE)
+                if sc and sc.levels:
+                    got, total = self.app.course_stars(sc)
+                    line = f"{len(sc.levels)} song{'s' if len(sc.levels) != 1 else ''}  ·  ★ {got} / {total}"
+                else:
+                    line = "none yet: ~/Music/bathero/inbox"
+                self.f.center(surf, line, self.f.small, color, y + ph - 26 * S, x + pw / 2)
             else:
                 self.f.center(surf, describe(self.app.kit), self.f.small, color, y + ph - 26 * S, x + pw / 2)
             if not self.app.has_drum(cat) and self.app.midi_in:
@@ -1503,7 +1537,7 @@ class HubScreen(Screen):
             ts = self.f.text(text, self.f.small, TEXT if on else DIM)
             surf.blit(ts, (x + 18 * S, self.h - 44 * S - ts.get_height() / 2))
             x += ts.get_width() + 34 * S
-        self.f.center(surf, "keys 1-4, arrows or hjkl + Enter   ·   F11 fullscreen   ·   Esc quit", self.f.small, DIM, self.h - 20 * S)
+        self.f.center(surf, "keys 1-5, arrows or hjkl + Enter   ·   F11 fullscreen   ·   Esc quit", self.f.small, DIM, self.h - 20 * S)
 
 
 # ---------------------------------------------------------------------------
@@ -1517,7 +1551,7 @@ class ListScreen(Screen):
         if self.course:
             got, total = app.course_stars(self.course)
             self.title, self.sub = self.course.name, f"{len(self.course.levels)} levels  ·  ★ {got} / {total}"
-            self.color = C.COLORS["hihat"]
+            self.color = C.COLORS["tom1" if cat == SG.SONG_COURSE else "hihat"]
         else:
             self.title, self.sub = next((t, s) for c, t, s in CATEGORIES if c == cat)
             self.color = C.COLORS[cat]
@@ -1635,8 +1669,10 @@ class ListScreen(Screen):
         return True
 
     def back(self):
-        if self.course:
-            self.app.go(CoursesScreen(self.app, COURSES.index(self.course) if self.course in COURSES else len(COURSES)))
+        if self.cat == SG.SONG_COURSE:
+            self.app.go(HubScreen(self.app, next(i for i, c in enumerate(CATEGORIES) if c[0] == "tom1")))
+        elif self.course:
+            self.app.go(CoursesScreen(self.app, COURSES.index(self.course)))
         else:
             self.app.go(HubScreen(self.app, CATEGORIES.index(next(c for c in CATEGORIES if c[0] == self.cat))))
 
@@ -1759,20 +1795,16 @@ class CoursesScreen(ListScreen):
 
     def __init__(self, app, sel=0):
         super().__init__(app, "hihat", sel)
-        self.courses = COURSES + [app.refresh_songs()]     # the imported songs last, re-read each time
+        self.courses = COURSES
 
     def items(self):
         out = []
         for c in self.courses:
             got, total = self.app.course_stars(c)
-            n = f"{len(c.levels)} {'songs' if c.key == SG.SONG_COURSE else 'levels'}"
-            out.append((c.name, f"{n} · ★ {got} / {total} · {c.desc}"))
+            out.append((c.name, f"{len(c.levels)} levels · ★ {got} / {total} · {c.desc}"))
         return out
 
     def accept(self):
-        if not self.courses[self.sel].levels:
-            self.app.toasts.add("no songs yet: drop a .wav in ~/Music/bathero/inbox and run the importer", DIM, key="songs")
-            return True
         self.app.go(ListScreen(self.app, self.courses[self.sel].key))
         return True
 

@@ -330,9 +330,17 @@ so bars and phrases follow the song's own tempo), notes snapped to a sixteenth o
 within 35 ms, one instrument within 40 ms deduped. ADTOF knows kick, snare, tom, hi-hat, cymbal
 only: no open hats, no ride, no second crash. The first song (I Won't Back Down, 3 min): 67 s.
 
-In the game the songs are one more course, "Songs", last in the hi-hat card's list
+In the game the songs have their own card on the hub, opened by the **rack tom** (key 4):
+since 2026-11-08 the hub is five cards, Exercises / Beats / Courses on top and Songs / Setup
+under them, wider (`HUB_ROWS`; a title too wide for a narrow card drops a size, a subtitle
+wraps; up / down go to the card under / over the middle). Behind it the songs are a course
 (`App.refresh_songs` puts it in `C.COURSE` but not in `COURSES`, which the intro and
-name-uniqueness checks walk; re-read from disk whenever the courses screen opens). A song chart
+name-uniqueness checks walk; re-read from disk whenever the card opens; back returns to the hub).
+
+**The drum module is found by the most specific hint** (`find_module`, also the device
+watcher's): until 2026-11-08 the first port matching any of `MODULE_HINTS` won, and with the
+piano plugged in the game sat on "Roland Digital Piano" ("roland") while the TD-17 played to
+nobody. Pianos, the Twister, the Launchpad and hhmapper's port are never taken. A song chart
 has `Chart.song` (its folder) and `song_offset`; `App.tracks_for` plays its two stems as the
 tracks "backing" and "drums" from `-song_offset / rate`. A rate other than 1 is ffmpeg `atempo`
 (pitch kept, chained under 0.5), cached as raw s16 in the song's `cache/` (0.4 s for both stems).

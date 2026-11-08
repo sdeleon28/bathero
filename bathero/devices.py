@@ -63,7 +63,8 @@ class DeviceWatcher:
         self.seen_midi = set(names)
         if self.midi_hint:
             return next((n for n in names if self.midi_hint.lower() in n.lower()), None)
-        return next((n for n in names if any(h in n.lower() for h in self.midi_hints)), None)
+        from .app import find_module
+        return find_module(names, self.midi_hints)
 
     def _find_audio(self):
         try:
