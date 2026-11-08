@@ -194,6 +194,7 @@ class Chart:
     backing: str = None         # a backing of its own ("cumbia": sounds.CUMBIA_STYLE, "keygen": the waiting screen's tune, "kick": sounds.KICK_STYLE on kick_rhythm()); None = by subdivision
     song: str = None            # an imported song's folder (bathero.songs): its stems are the backing
     song_offset: float = 0.0    # where chart time 0 (the first downbeat) falls in the song's audio, at rate 1
+    sections: list = None       # an imported song's sections: [(first bar, label)] (bathero.ingest, sections.json)
     hammer: bool = False        # the music's bass and chords play the level's kick figure, bar by bar (kick_rhythm()); "kick" backing implies it
 
     @property

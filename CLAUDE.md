@@ -378,6 +378,23 @@ either as times, which the renderer draws); side MUTE toggles the loop, side STO
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
 
+**Sections** (asked for 2026-11-08): the importer's last step writes `sections.json` (re-run on
+songs made before it: `process` adds a missing sections.json when the inbox file is still there).
+Demucs `htdemucs` four stems on mps (All-In-One's own demucs-infer fails on mps, "mps:0 and cpu",
+and still exits 0), then **All-In-One** (`all-in-one-infer` in `.venv-ingest`, MIT, harmonix-all,
+mps, `--no-demucs --stems-from-dir`) gives labelled segments (intro, verse, chorus, bridge, break,
+solo, inst, outro; start / end take a neighbour's), each of bathero's bars takes the label covering
+most of it, and the bars before the vocals start (vocals stem under -50 dB) are the intro, the bars
+after they end the outro: on I Won't Back Down the model put the 3-bar intro in the verse. The
+temporary stems are deleted. Chosen 2026-11-08 over SongFormer (pre-chorus, no solo or break: its
+encoders are a 2.75 GB download, the disk had 2 GB) after a comparison against that song's lyrics
+(whisper on the vocals stem) and vocal level: every boundary within a bar of the lyrics; wrong were
+the intro (fixed by the vocals rule) and the solo, called "bridge" (bridge 0.33, inst 0.20, solo
+under 0.05; left as the model says). `Chart.sections` [(first bar, label)]; on the Launchpad the
+pads take the user's colours (`LP.SECTION_COLORS`: intro cyan 41, verse green 21, pre-chorus pink
+57, chorus red 5, bridge and outro blue 45, break purple 49, solo yellow 13, inst magenta 53) and
+never merge across a section. The number keys and the highway markers are still the phrases.
+
 **A song counts itself in** (asked for 2026-11-08): two bars before chart time 0, on the song's
 own beat grid (`game.lead_in_for_chart`: `-beat_time(-8)`, the first beat interval extrapolated),
 congas on 1 and 3 of the first bar and on every beat of the second (`SONG_COUNT`,

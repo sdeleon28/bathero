@@ -52,6 +52,12 @@ WHITE, RESOLUTION_COLOR, PAGE_COLOR, SELECT_COLOR, STOP_COLOR, LOOP_COLOR = 3, 4
 PHRASE_COLORS = [45, 21, 57, 53, 37, 13, 29, 49, 17, 25]
 # a song's two bars of count-in, ahead of bar 1: orange, which no phrase (and no section) uses
 COUNT_COLOR = 9
+# an imported song's sections (sections.json), the user's convention; GroupCtl's names for 41 / 45 / 49 / 5
+SECTION_COLORS = {"intro": 41, "verse": 21, "pre-chorus": 57, "chorus": 5, "bridge": 45, "outro": 45,
+                  "break": 49, "solo": 13, "inst": 53}
+#                  cyan        green        pink               red          blue          blue
+#                  purple (breakdown) yellow (solo) magenta (other instrumental)
+OTHER_SECTION = 53
 
 
 def read_bank():
@@ -223,10 +229,12 @@ class Explorer:
         self.selecting = False
         return ("loop", (lo, hi))
 
-    def grid(self, colours, loop_bars, playing_bar, level, lead=0):
+    def grid(self, colours, loop_bars, playing_bar, level, lead=0, groups=None):
         """colours: one per bar of the level; loop_bars: (first, end) or None; playing_bar: the bar
         under the playhead while playing, else None; lead: bars of count-in ahead of bar 0 (a song's
-        two), one pad each whatever the zoom, bars -lead..-1. Returns the page's 64 slots (None = empty)."""
+        two), one pad each whatever the zoom, bars -lead..-1; groups: what a pad may merge (one per
+        bar, a song's section index; default the colour). Returns the page's 64 slots (None = empty)."""
+        groups = colours if groups is None else groups
         bars = len(colours)
         if level != self.level:
             self.level = level
@@ -243,7 +251,7 @@ class Explorer:
         i = 0
         while i < bars:
             j = i + 1
-            while j < bars and j - i < self.bpp and colours[j] == colours[i]:
+            while j < bars and j - i < self.bpp and groups[j] == groups[i]:
                 j += 1
             blocks.append({"bars": (i, j), "colour": colours[i],
                            "selected": (not self.selecting and inside(loop_bars, i, j)) or inside(self.anchor, i, j),

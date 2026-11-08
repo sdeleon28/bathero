@@ -36,8 +36,13 @@ def load():
         notes = [ChartNote(t=t, key=k, velocity=v) for t, k, v in s["notes"]]
         if not notes:
             continue
+        sections = None
+        try:
+            sections = [tuple(x) for x in json.load(open(os.path.join(SONGS_DIR, d, "sections.json")))["sections"]]
+        except (OSError, ValueError, KeyError):
+            pass
         out.append(Chart(name=f"♪ {s['title']}", notes=notes, bpm=s["bpm"], beats=s["beats"], backing="song",
-                         song=os.path.join(SONGS_DIR, d), song_offset=s["offset"],
+                         song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections,
                          desc=f"{s['bpm']:.0f} bpm · {len(notes)} notes · imported {s.get('made', '')}"))
     return out
 

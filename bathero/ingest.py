@@ -13,11 +13,18 @@ crash or a new step reruns only what is missing):
     beats.txt                beat_this on the full mix: beat times and their position in the bar
     drums.mid                ADTOF on the drum stem: kick 35, snare 38, tom 47, hi-hat 42, cymbal 49
     song.json                the chart: notes on the song's own beat grid (bathero.songs reads it)
+    sections.json            All-In-One (all-in-one-infer, harmonix-all) on the full mix: the song's
+                             sections (intro, verse, chorus, bridge, break, solo, inst, outro) per bar,
+                             bathero's bars; the bars before the vocals start are the intro and the
+                             bars after they end the outro (its own vocals stem says so)
+
+A song made before a step existed gets that step on the next run (the file in the inbox stays).
 """
 import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -31,6 +38,7 @@ AUDIO_EXT = (".wav", ".aif", ".aiff", ".flac", ".mp3", ".m4a")
 
 # ADTOF's classes -> bathero instruments
 ADTOF_KEYS = {35: "kick", 36: "kick", 38: "snare", 40: "snare", 47: "tom1", 42: "hihat", 46: "hihat", 49: "crash", 51: "crash"}
+VOCAL_SILENT_DB = -50  # a bar of the vocals stem under this has nobody singing
 SNAP_MS = 35          # a note this close to a sixteenth (or a triplet eighth) of the song's grid lands on it
 DEDUPE_MS = 40        # one instrument heard twice this close is one stroke
 
@@ -121,10 +129,85 @@ def build_chart(title, beats, raw):
             "notes": notes, "made": time.strftime("%Y-%m-%d %H:%M")}
 
 
+def bar_starts(song):
+    """bathero's bars of a song.json in audio seconds: every fourth beat from the first downbeat."""
+    return [song["offset"] + b for b in song["beats"][::4]]
+
+
+def per_bar(segments, bars):
+    """[(start, end, label)] in audio seconds -> the label covering most of each bar (None for
+    All-In-One's start / end, the silence around the music)."""
+    out = []
+    for i, b0 in enumerate(bars):
+        b1 = bars[i + 1] if i + 1 < len(bars) else b0 + (bars[-1] - bars[-2] if len(bars) > 1 else 2.0)
+        best = max(segments, key=lambda s: max(0.0, min(b1, s[1]) - max(b0, s[0])))
+        out.append(None if best[2] in ("start", "end") else best[2])
+    for i in range(len(out)):                       # the silence takes its neighbour's section
+        if out[i] is None:
+            out[i] = next((x for x in out[i::-1] if x), None) or next((x for x in out[i:] if x), "intro")
+    return out
+
+
+def vocal_levels(path, bars):
+    import numpy as np
+    import soundfile as sf
+    x, sr = sf.read(path, always_2d=True)
+    x = x.mean(axis=1)
+    out = []
+    for i, b0 in enumerate(bars):
+        b1 = bars[i + 1] if i + 1 < len(bars) else b0 + 2.0
+        seg = x[int(b0 * sr):int(b1 * sr)]
+        out.append(round(float(20 * np.log10(np.sqrt((seg ** 2).mean()) + 1e-9)) if len(seg) else -120.0, 1))
+    return out
+
+
+def find_sections(src, out):
+    """sections.json: [[first bar, label], ...] on bathero's bars (0 = the first downbeat)."""
+    path = os.path.join(out, "sections.json")
+    if os.path.exists(path):
+        return
+    song = json.load(open(os.path.join(out, "song.json")))
+    bars = bar_starts(song)
+    tmp = os.path.join(out, "_allin1")
+    try:
+        # the four stems All-In-One was trained on (htdemucs), by the demucs that runs on mps: the
+        # package's own demucs-infer fails there ("mps:0 and cpu") and still exits 0
+        run([os.path.join(VENV_BIN, "python"), "-m", "demucs", "-n", "htdemucs", "-d", "mps",
+             "-o", os.path.join(tmp, "sep"), "--filename", "{stem}.{ext}", src])
+        stems = os.path.join(tmp, "sep", "htdemucs")
+        run([os.path.join(VENV_BIN, "all-in-one-infer"), "-d", "mps", "--no-multiprocess", "--no-demucs",
+             "--stems-from-dir", stems, "--stems-id", "song",
+             "-o", os.path.join(tmp, "struct"), "--spec-dir", os.path.join(tmp, "spec")])
+        result = os.path.join(tmp, "struct", "song.json")
+        if not os.path.exists(result):
+            raise subprocess.CalledProcessError(0, "all-in-one-infer", stderr=b"no analysis written")
+        res = json.load(open(result))
+        segments = [(s["start"], s["end"], s["label"]) for s in res["segments"]]
+        labels = per_bar(segments, bars)
+        vocals = vocal_levels(os.path.join(stems, "vocals.wav"), bars)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    sung = [i for i, db in enumerate(vocals) if db > VOCAL_SILENT_DB]
+    if sung:
+        for i in range(sung[0]):
+            labels[i] = "intro"
+        for i in range(sung[-1] + 1, len(labels)):
+            labels[i] = "outro"
+    sections = [[i, lab] for i, lab in enumerate(labels) if i == 0 or labels[i - 1] != lab]
+    with open(path, "w") as f:
+        json.dump({"sections": sections, "model": "all-in-one-infer harmonix-all",
+                   "segments": [[round(a, 3), round(b, 3), lab] for a, b, lab in segments],
+                   "vocal_db": vocals, "made": time.strftime("%Y-%m-%d %H:%M")}, f)
+    print("[ingest] sections: " + "  ".join(f"{lab} {i + 1}" for i, lab in sections), flush=True)
+
+
 def process(src):
     title = os.path.splitext(os.path.basename(src))[0]
     out = os.path.join(SONGS_DIR, slug(title))
     if os.path.exists(os.path.join(out, "song.json")):
+        if not os.path.exists(os.path.join(out, "sections.json")):
+            print(f"[ingest] {title}: sections", flush=True)
+            find_sections(src, out)
         return out
     os.makedirs(out, exist_ok=True)
     print(f"[ingest] {title}", flush=True)
@@ -136,6 +219,7 @@ def process(src):
     song["source"] = os.path.basename(src)
     with open(os.path.join(out, "song.json"), "w") as f:
         json.dump(song, f, ensure_ascii=False)
+    find_sections(src, out)
     counts = {}
     for _, k, _ in song["notes"]:
         counts[k] = counts.get(k, 0) + 1

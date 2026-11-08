@@ -5,6 +5,7 @@ inside a section the hi-hat moves down, the crash moves up, the snare accepts
 and the kick goes back. The keyboard always works too.
 """
 import argparse
+import bisect
 import math
 import os
 import sys
@@ -3407,10 +3408,17 @@ class PlayScreen(Screen):
     def launchpad_frame(self):
         ch, g, ex = self.chart, self.game, self.app.lp_explorer
         lead = SONG_COUNT_BEATS // 4 if ch.song else 0
-        colours = getattr(self, "_lp_colours", None)
-        if colours is None:
-            colours = self._lp_colours = [LP.PHRASE_COLORS[(ch.phrase_at(ch.beat_time(i * 4)) or 0) % len(LP.PHRASE_COLORS)]
-                                          for i in range(ch.bars)]
+        cached = getattr(self, "_lp_colours", None)
+        if cached is None:
+            if ch.sections:                                # a song's sections, in the user's colours
+                starts = [b for b, _ in ch.sections]
+                idx = [max(0, bisect.bisect_right(starts, i) - 1) for i in range(ch.bars)]
+                colours = [LP.SECTION_COLORS.get(ch.sections[k][1], LP.OTHER_SECTION) for k in idx]
+                cached = self._lp_colours = (colours, idx)
+            else:
+                cached = self._lp_colours = ([LP.PHRASE_COLORS[(ch.phrase_at(ch.beat_time(i * 4)) or 0) % len(LP.PHRASE_COLORS)]
+                                              for i in range(ch.bars)], None)
+        colours, groups = cached
         playing = not (self.armed or g.paused or g.finished)
         bar = None
         if playing or self.editor is not None:            # editing: the view's bar blinks
@@ -3424,7 +3432,7 @@ class PlayScreen(Screen):
         loop_bars = None
         if span is not None:
             loop_bars = (int(round(ch.beat_pos(span[0]) / 4)), int(round(ch.beat_pos(span[1]) / 4)))
-        ex.grid(colours, loop_bars, bar, ch.key, lead)
+        ex.grid(colours, loop_bars, bar, ch.key, lead, groups)
         return ex.frame(playing, self.app.loop_on and span is not None)
 
     def to_list(self):
