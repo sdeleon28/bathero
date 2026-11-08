@@ -24,9 +24,21 @@ def load_settings(path=SETTINGS_PATH):
 
 
 def save_settings(settings, path=SETTINGS_PATH):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(settings, f, indent=2)
+    """Written to a temporary file and moved over the old one, so a full disk leaves the old file
+    whole; a failure is printed, never raised (2026-11-08: a full disk crashed the game at every
+    launch, from here)."""
+    tmp = path + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump(settings, f, indent=2)
+        os.replace(tmp, path)
+    except OSError as e:
+        print(f"settings not saved: {e}", flush=True)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 PROGRESS_PATH = os.path.expanduser("~/.config/bathero/progress.json")

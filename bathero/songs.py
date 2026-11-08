@@ -2,7 +2,9 @@
 
 A song folder holds song.json (the chart on the song's own beat grid), backing.wav (the song
 without its drums) and drums.wav (the drum stem). The audio is decoded, and stretched to the
-tempo being played, by ffmpeg (atempo: pitch kept), cached per rate next to the stems.
+tempo being played, by ffmpeg (atempo: pitch kept), straight into memory: nothing is written
+(until 2026-11-08 every rate tried was kept as raw audio in the song's cache/, 823 MB for one song,
+and the disk filled up mid-stretch).
 """
 import json
 import os
@@ -101,15 +103,34 @@ def _atempo(rate):
 
 
 def audio(song_dir, stem, rate=1.0):
-    """The stem as int16 stereo at SR, stretched to `rate` (cached as a raw file)."""
+    """The stem as int16 stereo at SR, stretched to `rate`, decoded into memory (0.5..1.2 s for a
+    3-minute stem). Raises RuntimeError with ffmpeg's message when it fails."""
     rate = round(rate, 3)
-    cache = os.path.join(song_dir, "cache", f"{stem}@{rate:.3f}.s16")
-    if not os.path.exists(cache):
-        os.makedirs(os.path.dirname(cache), exist_ok=True)
-        cmd = [_ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", os.path.join(song_dir, f"{stem}.wav")]
-        if rate != 1.0:
-            cmd += ["-af", _atempo(rate)]
-        cmd += ["-f", "s16le", "-ac", "2", "-ar", str(SR), cache + ".part"]
-        subprocess.run(cmd, check=True)
-        os.replace(cache + ".part", cache)
-    return np.fromfile(cache, dtype=np.int16).reshape(-1, 2)
+    cmd = [_ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-i", os.path.join(song_dir, f"{stem}.wav")]
+    if rate != 1.0:
+        cmd += ["-af", _atempo(rate)]
+    cmd += ["-f", "s16le", "-ac", "2", "-ar", str(SR), "-"]
+    r = subprocess.run(cmd, capture_output=True)
+    if r.returncode != 0:
+        msg = r.stderr.decode(errors="replace").strip().splitlines()
+        raise RuntimeError(f"{stem}: {msg[-1] if msg else f'ffmpeg exited {r.returncode}'}")
+    return np.frombuffer(r.stdout, dtype=np.int16).reshape(-1, 2)
+
+
+def stems(song_dir, rate=1.0):
+    """{"backing": pcm, "drums": pcm} at `rate`, both decoded at once."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(2) as ex:
+        futures = {st: ex.submit(audio, song_dir, st, rate) for st in ("backing", "drums")}
+        return {st: f.result() for st, f in futures.items()}
+
+
+def clear_disk_cache():
+    """Delete the stretched copies older versions kept in every song's cache/ folder."""
+    import shutil
+    try:
+        names = os.listdir(SONGS_DIR)
+    except OSError:
+        return
+    for n in names:
+        shutil.rmtree(os.path.join(SONGS_DIR, n, "cache"), ignore_errors=True)

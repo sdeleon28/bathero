@@ -139,7 +139,9 @@ class App:
         self.lp_repaint_at = None
         self.twister_checked = 0.0
         self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
-        self.tempo_job = None        # (rate, thread) stretching the stems in the background
+        self.tempo_job = None        # (rate, thread, song, result) stretching the stems in the background
+        self.song_pcm = {}           # (song, rate) -> stems stretched by the tempo knob, until tracks_for takes them
+        SG.clear_disk_cache()        # what older versions kept on disk
         self.refresh_songs()
         self.importer = IM.Importer()         # the song importer's process (bathero.ingest --watch), on / off from the songs screen
         self.importer_seen = None             # (its start, songs imported) last seen: a new song refreshes the list
@@ -658,15 +660,25 @@ class App:
             scr = self.play_screen_song()
             if scr and abs(rate - self.rate) > 0.004:
                 song = scr.chart.song
-                th = threading.Thread(target=lambda: [SG.audio(song, st, rate) for st in ("backing", "drums")], daemon=True)
+                box = {}
+
+                def stretch():
+                    try:
+                        box["pcm"] = SG.stems(song, rate)
+                    except Exception as e:              # noqa: BLE001
+                        box["error"] = e
+                th = threading.Thread(target=stretch, daemon=True)
                 th.start()
-                self.tempo_job = (rate, th)
+                self.tempo_job = (rate, th, song, box)
                 self.toasts.add(f"stretching to {rate:.0%}...", DIM, key="twister_tempo")
         if self.tempo_job and not self.tempo_job[1].is_alive():
-            rate, _ = self.tempo_job
+            rate, _, song, box = self.tempo_job
             self.tempo_job = None
             scr = self.play_screen_song()
-            if scr:
+            if "error" in box:
+                self.toasts.add(f"could not stretch to {rate:.0%}: {box['error']}", JUDGE_COLORS["MISS"], key="twister_tempo")
+            elif scr and scr.chart.song == song:
+                self.song_pcm[(song, round(rate, 3))] = box["pcm"]
                 self.rate = rate
                 scr.retry()
 
@@ -746,23 +758,38 @@ class App:
         lead_in = lead_in_for_chart(chart)
         total = chart.length + TAIL_S + 0.5
         out = {}
+        # one song at one rate is kept in memory: the one being opened (a song's stems are 35..80 MB
+        # each); another song, another rate or a level that is not a song lets the old ones go
+        rate_key = round(chart.rate, 3)
+        for k in [k for k in self.track_cache if k[0] == "song" and (k[1], k[3]) != (chart.song, rate_key)]:
+            del self.track_cache[k]
+        for k in [k for k in self.song_pcm if k != (chart.song, rate_key)]:
+            del self.song_pcm[k]
         if chart.song:
             # an imported song: its own stems, stretched to the rate, starting where chart 0 falls in them
             t0 = -chart.song_offset / chart.rate
+            if any(("song", chart.song, name, rate_key) not in self.track_cache for name in ("backing", "drums")):
+                try:
+                    pcm = self.song_pcm.pop((chart.song, rate_key), None) or SG.stems(chart.song, chart.rate)
+                except Exception as e:                      # noqa: BLE001
+                    self.toasts.add(f"could not load the song's audio: {e}", JUDGE_COLORS["MISS"], key="song_audio")
+                    pcm = None
+                for name in ("backing", "drums"):
+                    if pcm is not None:
+                        self.track_cache[("song", chart.song, name, rate_key)] = Track(pcm[name], t0)
             for name in ("backing", "drums"):
-                key = ("song", chart.song, name, round(chart.rate, 3))
-                if key not in self.track_cache:
-                    self.track_cache[key] = Track(SG.audio(chart.song, name, chart.rate), t0)
-                self.track_cache[key].gain = self.SONG_BASE_GAIN * self.song_gain(name)
-                out[name] = self.track_cache[key]
+                key = ("song", chart.song, name, rate_key)
+                if key in self.track_cache:
+                    self.track_cache[key].gain = self.SONG_BASE_GAIN * self.song_gain(name)
+                    out[name] = self.track_cache[key]
             # the count, 1 . 3 . | 1 2 3 4, its own track so the metronome's mode and level never mute it
             # at the song's own level: its loudest hit COUNT_OVER_DB over the backing's loud moments in the
             # first 30 s (at full scale it came in 10..18 dB over the music, "way too loud", 2026-11-08)
             key = ("count", chart.song, round(chart.bpm, 3))
             if key not in self.track_cache:
                 pcm = render_count(chart, lead_in, SONG_COUNT_BEATS, SONG_COUNT)
-                backing = out["backing"]
-                song_db = SND.loud_db(backing.pcm, -backing.t0, 30.0)
+                backing = out.get("backing")
+                song_db = SND.loud_db(backing.pcm, -backing.t0, 30.0) if backing else -20.0
                 self.track_cache[key] = Track(pcm, -lead_in)
                 self.track_cache[key].count_db = (song_db, SND.loud_db(pcm, pct=100))
             song_db, count_db = self.track_cache[key].count_db
