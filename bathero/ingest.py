@@ -45,6 +45,7 @@ AUDIO_EXT = (".wav", ".aif", ".aiff", ".flac", ".mp3", ".m4a")
 
 # ADTOF's classes -> bathero instruments
 ADTOF_KEYS = {35: "kick", 36: "kick", 38: "snare", 40: "snare", 47: "tom1", 42: "hihat", 46: "hihat", 49: "crash", 51: "crash"}
+MIN_FREE_MB = 600      # a song takes ~150 MB, its temporary stems ~250 MB more: never fill the disk
 VOCAL_SILENT_DB = -50  # a bar of the vocals stem under this has nobody singing
 SNAP_MS = 35          # a note this close to a sixteenth (or a triplet eighth) of the song's grid lands on it
 DEDUPE_MS = 40        # one instrument heard twice this close is one stroke
@@ -292,6 +293,9 @@ def process(src):
     steps = todo(src)
     if not steps:
         return out
+    free = shutil.disk_usage(SONGS_DIR).free // 2 ** 20
+    if free < MIN_FREE_MB:
+        raise RuntimeError(f"only {free} MB free on the disk (needs {MIN_FREE_MB})")
     if STATUS is not None:
         STATUS.begin(title, slug(title), steps)
     if os.path.exists(os.path.join(out, "song.json")):

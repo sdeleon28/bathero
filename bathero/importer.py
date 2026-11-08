@@ -13,7 +13,8 @@ import signal
 import subprocess
 import time
 
-from .songs import STATUS_PATH
+from . import ingest as IN
+from .songs import INBOX, STATUS_PATH
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PYTHON = os.path.join(REPO, ".venv-ingest", "bin", "python")
@@ -85,6 +86,18 @@ class Importer:
                 pass
         self.started_at = 0.0
         self.read_at = 0.0
+
+    def waiting(self):
+        """Titles in the inbox that are not complete songs yet (rescanned every 2 s)."""
+        now = time.time()
+        if now - getattr(self, "inbox_at", 0) > 2.0:
+            self.inbox_at = now
+            try:
+                names = sorted(n for n in os.listdir(INBOX) if n.lower().endswith(IN.AUDIO_EXT) and not n.startswith("."))
+                self.inbox = [os.path.splitext(n)[0] for n in names if IN.todo(os.path.join(INBOX, n))]
+            except OSError:
+                self.inbox = []
+        return self.inbox
 
     def current(self):
         """(title, label, fraction done 0..1, seconds on this song) of the song in hand, or None."""

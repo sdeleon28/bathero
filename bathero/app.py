@@ -1951,10 +1951,17 @@ class SongsScreen(ListScreen):
         if cur is not None and f"♪ {cur[0]}" not in listed:
             t = int(cur[3])
             out.append((cur[0], f"{cur[1]} · {t // 60}:{t % 60:02d}", cur[2], ACCENT))
-        for title in st.get("queue", []):
-            if (cur is None or title != cur[0]) and f"♪ {title}" not in listed:
+        failed = st.get("failed", {})
+        shown = {cur[0]} if cur is not None else set()
+        for title in st.get("queue", []) + im.waiting():       # the queue first, then the rest of the inbox
+            if title in shown or title in failed or f"♪ {title}" in listed:
+                continue
+            shown.add(title)
+            if im.running:
                 out.append((title, "queued", None, DIM))
-        for title, why in st.get("failed", {}).items():
+            else:
+                out.append((title, "waiting", None, JUDGE_COLORS["OK"]))
+        for title, why in failed.items():
             if f"♪ {title}" not in listed:
                 out.append((title, f"failed: {why}", None, JUDGE_COLORS["MISS"]))
         return out
@@ -1971,7 +1978,9 @@ class SongsScreen(ListScreen):
         x = self.w * 0.12
         for title, label, frac, colour in self.pending()[:max(0, rows_left)]:
             shown = f"♪ {title}"
-            surf.blit(self.f.text(shown if len(shown) <= 34 else shown[:33] + "…", self.f.mid, DIM), (x, y))
+            while len(shown) > 8 and self.f.text(shown, self.f.mid, DIM).get_width() > 480 * S:
+                shown = shown[:-2] + "…"
+            surf.blit(self.f.text(shown, self.f.mid, DIM), (x, y))
             self.progress_row(surf, x + 500 * S, y, self.w * 0.88 - (x + 500 * S), label, frac, colour)
             y += row_h
 
@@ -1979,28 +1988,33 @@ class SongsScreen(ListScreen):
         super().draw(surf, fps)
         S, im = self.s, self.app.importer
         st = im.status()
+        waiting = len(im.waiting())
         if im.running and st.get("current"):
             n = 1 + len([q for q in st.get("queue", []) if q != st["current"]["title"]])
-            text, colour = f"importer: importing {n} song{'s' if n > 1 else ''}", ACCENT
+            text, colour = f"IMPORTER ON  ·  importing {n} song{'s' if n > 1 else ''}", ACCENT
         elif im.running:
-            text, colour = "importer: watching the inbox" if im.watching else "importer: running", JUDGE_COLORS["PERFECT"]
+            text, colour = "IMPORTER ON  ·  watching the inbox" if im.watching else "IMPORTER ON", JUDGE_COLORS["PERFECT"]
         elif im.starting:
-            text, colour = "importer: starting", ACCENT
+            text, colour = "IMPORTER STARTING", ACCENT
         else:
-            text, colour = "importer: off", DIM
-        ts = self.f.text(text, self.f.small, colour)
-        rx = self.w * 0.88 - ts.get_width()
-        surf.blit(ts, (rx, 28 * S))
+            text = "IMPORTER OFF" + (f"  ·  {waiting} song{'s' if waiting != 1 else ''} waiting" if waiting else "")
+            colour = JUDGE_COLORS["OK"] if waiting else DIM
         on = im.running or im.starting
-        pygame.draw.circle(surf, colour, (int(rx - 12 * S), int(28 * S + ts.get_height() / 2)), int(5 * S), 0 if on else 1)
+        ts = self.f.text(text, self.f.small, colour)
+        pill = pygame.Rect(0, 0, int(ts.get_width() + 44 * S), int(ts.get_height() + 10 * S))
+        pill.topright = (int(self.w * 0.88), int(22 * S))
+        pygame.draw.rect(surf, lerp(LANE_BG, colour, 0.25 if on else 0.08), pill, border_radius=pill.h // 2)
+        pygame.draw.rect(surf, colour, pill, 1, border_radius=pill.h // 2)
+        pygame.draw.circle(surf, colour, (pill.x + int(16 * S), pill.centery), int(5 * S), 0 if on else 1)
+        surf.blit(ts, (pill.x + 30 * S, pill.centery - ts.get_height() / 2))
         if not self.items() and not self.pending():
             self.f.center(surf, "no songs yet: drop a .wav into ~/Music/bathero/inbox" +
                           ("" if on else ", then turn the importer on (floor tom or I)"), self.f.mid, DIM, 200 * S)
 
     def legend_spec(self):
         on = self.app.importer.running or self.app.importer.starting
-        return ([("hihat", "down"), ("crash", "up"), ("snare", "select"), ("floor", f"importer {'off' if on else 'on'}"), ("kick", "back")],
-                "arrows or j k · Enter or l · I importer on / off · Esc or h")
+        return ([("hihat", "down"), ("crash", "up"), ("snare", "select"), ("floor", "stop importer" if on else "start importer"), ("kick", "back")],
+                "arrows or j k · Enter or l · I start / stop the importer · Esc or h")
 
     def on_drum(self, inst):
         if inst == "floor":

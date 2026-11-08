@@ -382,13 +382,17 @@ buttons act on release unless held 0.5 s; other screens show it dark.
 ran by hand): the importer writes `~/.config/bathero/ingest.json` (`songs.STATUS_PATH`, `ingest.Status`):
 pid, watching, a heartbeat every 2 s, the song in hand with its remaining steps and their expected
 seconds (`EXPECT_S`), the queue, the failures (not retried until the file changes), a count of songs
-finished. The game's `Importer` reads it (a dead pid or a heartbeat older than 10 s is "not running"),
+finished; a song is refused (failed, "only N MB free") under `MIN_FREE_MB` 600 of free disk. The game's `Importer` reads it (a dead pid or a heartbeat older than 10 s is "not running"),
 starts `nice -n 10 .venv-ingest/bin/python -m bathero.ingest --watch` in its own session (it outlives
 the game and a deploy), output appended to `~/Library/Logs/bathero/ingest.log`, and stops it with
 SIGTERM (the importer exits through its finally blocks: the step's process is killed, its temporary
 folder deleted, the status marked stopped). The **songs screen** (`SongsScreen`, the hub's rack tom,
-now opened even with no songs) says top right whether it runs ("importer: watching the inbox",
-"importing 2 songs", "off"); **the floor tom or I** turns it on and off, remembered in settings
+now opened even with no songs) shows a pill top right ("IMPORTER ON · watching the inbox",
+"IMPORTER ON · importing 2 songs", "IMPORTER OFF · 10 songs waiting"; until that evening the legend
+chip read "importer on" for the action and was taken for the state, so the user waited on an
+importer that never ran: the chip now says "start importer" / "stop importer"); the inbox's
+unfinished songs are rows even while it is off ("waiting"; `Importer.waiting`, `ingest.todo`);
+**the floor tom or I** turns it on and off, remembered in settings
 (`importer_on`: on, the game starts it at launch); the song in hand is a grey row with its step
 ("transcribing the drums · 3/5 · 1:10") over a progress bar (steps weighted by `EXPECT_S`, a step
 never full until it ends), then the queued and the failed ones. `App.poll_importer` refreshes the
