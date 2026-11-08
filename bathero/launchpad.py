@@ -162,6 +162,7 @@ class Launchpad:
                 except Exception:
                     pass
         self.inp = self.out = None
+        self.forget()              # a replugged Launchpad comes back dark: paint it whole
 
 
 def blank():

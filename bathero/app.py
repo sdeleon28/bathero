@@ -42,7 +42,7 @@ from . import ghost as GH
 from . import intro as IN
 from . import keygen
 from . import songs as SG
-from .twister import Twister
+from .twister import Twister, PORT_HINT as TWISTER_HINT
 from . import launchpad as LP
 from . import songedit as SE
 from . import importer as IM
@@ -623,6 +623,10 @@ class App:
             if self.twister.open():
                 self.toasts.add(f"Twister: bank 2 is the song mixer", ACCENT, key="twister")
                 self.sync_twister()
+                self.twister_resync_at = now + 1.0       # again, in case a replugged Twister was still booting
+        if getattr(self, "twister_resync_at", None) and now >= self.twister_resync_at:
+            self.twister_resync_at = None
+            self.sync_twister()
         last = {}
         while self.twister_queue:
             kind, name, v = self.twister_queue.popleft()
@@ -674,6 +678,7 @@ class App:
         self.launchpad.forget()
         self.launchpad_queue.clear()
         if bank == LP.LENT_BANK:
+            self.sync_twister()                     # bank 2's LEDs and rings, also after a replug the watcher missed
             self.lp_explorer.enter()
             self.lp_repaint_at = time.perf_counter() + 0.3     # again, over a late frame of GroupCtl's
             if was != bank:
@@ -861,6 +866,26 @@ class App:
             kind, name, connected = self.watcher.events.get_nowait()
             self.on_device(kind, name, connected)
 
+    def controller_port(self, name, connected):
+        """The Twister or the Launchpad left or came back (a replug, a USB hub's reset): drop the
+        old ports and open them again at once, so the Twister's LEDs and rings and the Launchpad's
+        pads are painted whole (a replugged controller comes back dark, and until 2026-11-08 the
+        game kept its old ports and never repainted). True when the port was one of them."""
+        low = name.lower()
+        if TWISTER_HINT in low:
+            self.twister.close()
+            self.twister_checked = 0.0              # poll_twister reopens it and syncs the rings
+            if not connected:
+                self.toasts.add("Twister disconnected", DIM, key="twister")
+            return True
+        if LP.PORT_HINT in low:
+            self.launchpad.close()
+            self.launchpad_checked = 0.0            # poll_launchpad reopens it and paints every pad
+            if not connected:
+                self.toasts.add("Launchpad disconnected", DIM, key="launchpad")
+            return True
+        return False
+
     def on_device(self, kind, name, connected):
         """A device appeared or went away: toast it and react."""
         ok, bad = JUDGE_COLORS["PERFECT"], JUDGE_COLORS["MISS"]
@@ -884,6 +909,8 @@ class App:
                         pass
                 self.midi_in, self.midi_name = None, None
                 self.toasts.add(f"{name} disconnected: keyboard only", bad)
+        elif kind in ("midi-other", "midi-gone") and self.controller_port(name, connected):
+            pass
         elif kind == "midi-other":
             self.toasts.add(f"MIDI device connected: {name}", DIM)
         elif kind == "audio-list":

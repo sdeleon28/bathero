@@ -364,7 +364,13 @@ too), and applies the last turn per frame. **A turn is never echoed back to its 
 `Twister.turning`): the Twister moves its position to any CC it receives, and until 2026-11-08 the
 setters of knobs 3, 5, 15 and 16 sent the ring a frame after the turn, a value the knob had already
 left, so a quick turn was pulled back and partly lost ("encoders sometimes don't work"). Rings go
-out for pushes, the keyboard and the sync on connect only.
+out for pushes, the keyboard and the sync on connect only. **A replug is seen** (2026-11-08: after one, the
+game kept its old ports and the Twister's LEDs and rings stayed dark): the device watcher reports a
+MIDI port that disappears (`midi-gone`) as well as one that appears; for the Twister or the Launchpad
+`App.controller_port` closes the ports and reopens them at once, the Twister's LEDs and rings are
+sent on opening and again a second later (it may still be booting), the Launchpad is painted whole
+(`close` forgets what was lit). Entering bank 2 also re-sends the Twister's LEDs and rings, which
+covers a replug quicker than the watcher's 1.5 s poll.
 
 **The Launchpad MK2 on Twister bank 2** (`bathero/launchpad.py`, asked for 2026-11-08): the bank
 buttons send CC 0..3 on channel 4 (bank 1..4; 127 for the bank entered, 0 for the one left).

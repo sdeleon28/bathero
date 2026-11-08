@@ -60,6 +60,8 @@ class DeviceWatcher:
         for n in names:
             if n not in self.seen_midi and self.seen_midi:
                 self.events.put(("midi-other", n, True))    # any new MIDI device is worth a word
+        for n in self.seen_midi - set(names):
+            self.events.put(("midi-gone", n, False))        # the Twister / Launchpad reopen on their way back
         self.seen_midi = set(names)
         if self.midi_hint:
             return next((n for n in names if self.midi_hint.lower() in n.lower()), None)
