@@ -378,6 +378,15 @@ either as times, which the renderer draws); side MUTE toggles the loop, side STO
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
 
+**Songs are sorted by difficulty** (asked for 2026-11-08, `songs.difficulty`, 0..10, easiest first,
+shown first on each row): from the chart in absolute time, never in beats (beat_this halved some
+tempos: Sugar, We're Goin Down read 81 bpm, Fat Lip 100): half the mean notes per second plus half
+the busiest 4 s, + 8 x the share of kick gaps under 200 ms, + 8 x the share of snare / tom gaps under
+160 ms, + toms a minute / 10, all halved. That day: I Won't Back Down 3.1, Come Out and Play 5.8,
+The Middle 6.5, When I Come Around 6.6, Basket Case 7.4, Fat Lip 7.7, Sugar 8.0, Misery Business 9.0.
+An edit or a new song can re-sort the list: `App.refresh_songs` re-finds the playing song's index by
+name (a retry would otherwise load its neighbour), and the songs screen keeps its selection by name.
+
 **The importer from the game** (`bathero/importer.py`, asked for 2026-11-08; until then it only ever
 ran by hand): the importer writes `~/.config/bathero/ingest.json` (`songs.STATUS_PATH`, `ingest.Status`):
 pid, watching, a heartbeat every 2 s, the song in hand with its remaining steps and their expected

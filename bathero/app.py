@@ -462,6 +462,12 @@ class App:
         C.COURSE (so the lists and the play screen treat it like a course) but not in COURSES
         (the built-in levels, which every intro and uniqueness check walks)."""
         C.COURSE[SG.SONG_COURSE] = SG.course()
+        scr = getattr(self, "screen_obj", None)
+        if isinstance(scr, PlayScreen) and scr.cat == SG.SONG_COURSE:
+            # sorted by difficulty: an edit or a new song can move the one being played
+            names = [ch.name for ch in C.COURSE[SG.SONG_COURSE].levels]
+            if scr.chart.name in names:
+                scr.index = names.index(scr.chart.name)
         return C.COURSE[SG.SONG_COURSE]
 
     # --- the song importer (importer.py) -------------------------------------------------
@@ -1936,10 +1942,18 @@ class SongsScreen(ListScreen):
     def update(self):
         if self.app.importer_seen != self.seen or self.seen is None:     # a song finished: the list grew
             self.seen = self.app.importer_seen
+            old = self.course.levels[self.sel].name if self.course and self.sel < len(self.course.levels) else None
             self.course = C.COURSE.get(SG.SONG_COURSE)
+            names = [ch.name for ch in self.course.levels]
+            if old in names:                               # sorted by difficulty: keep the selection on its song
+                self.sel = names.index(old)
             got, total = self.app.course_stars(self.course)
             n = len(self.course.levels)
             self.sub = f"{n} song{'s' if n != 1 else ''}  ·  ★ {got} / {total}"
+
+    def items(self):
+        return [(ch.name, f"{ch.desc.split(' · ')[0]} · {ch.bpm:.0f} bpm · {len(ch.notes)} notes · "
+                          + " · ".join(ch.desc.split(" · ")[1:])) for ch in self.app.items_for(self.cat)]
 
     def pending(self):
         """[(title, label, fraction or None, colour)] for the songs the importer has not finished."""
