@@ -941,6 +941,24 @@ def render_count(chart, lead_in_s, beats, counted):
     return _mix_events(events, lead_in_s + 0.6, METRO_DRIVE)
 
 
+def loud_db(pcm, start_s=0.0, dur_s=None, window_s=0.05, pct=90):
+    """How loud a stretch of audio is where it is loud: the `pct` percentile of its RMS over
+    `window_s` windows, in dB of full scale. pcm: mono float in -1..1 or int16 (n, 2)."""
+    x = pcm.astype(np.float64)
+    if x.ndim == 2:
+        x = x.mean(axis=1)
+    if pcm.dtype == np.int16:
+        x /= 32767
+    i = int(max(0.0, start_s) * SR)
+    x = x[i: i + int(dur_s * SR)] if dur_s else x[i:]
+    w = int(window_s * SR)
+    n = len(x) // w
+    if n == 0:
+        return -120.0
+    rms = np.sqrt((x[: n * w].reshape(n, w) ** 2).mean(axis=1))
+    return float(20 * np.log10(max(np.percentile(rms, pct), 1e-6)))
+
+
 def render_metronome(chart, lead_in_s, total_s, mode="full", count=True):
     """Congas for every bar from the count-in to total_s (chart time), on the chart's own
     beat grid (constant tempo or a song's tracked beats). mode: full / beats. count=False starts

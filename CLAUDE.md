@@ -438,7 +438,10 @@ never merge across a section. The number keys and the highway markers are still 
 own beat grid (`game.lead_in_for_chart`: `-beat_time(-8)`, the first beat interval extrapolated),
 congas on 1 and 3 of the first bar and on every beat of the second (`SONG_COUNT`,
 `sounds.render_count`), as their own track "count" so the metronome's mode and level never mute
-it; a song's metronome starts at bar 1 (`render_metronome(count=False)`). The screen shows the
+it; **at the song's own level** (since that evening, "way too loud": at METRONOME_GAIN it came
+in 17..20 dB over the backing as played): its loudest hit `COUNT_OVER_DB` (3) over the backing's loud
+moments in the song's first 30 s (`sounds.loud_db`, the 90th percentile of 50 ms RMS) at the backing
+knob's gain (never figured under 25 % of it, so a muted backing does not silence the count); a song's metronome starts at bar 1 (`render_metronome(count=False)`). The screen shows the
 counted digit (held, dimmed, over a beat not counted). On the Launchpad the two count bars are the
 first two pads, orange (`LP.COUNT_COLOR` 9, out of `PHRASE_COLORS` and of the section colours),
 one pad each at any zoom; a pad there starts the count from that bar, a jump to bar 1 runs up

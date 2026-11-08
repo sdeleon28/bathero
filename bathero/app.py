@@ -507,6 +507,7 @@ class App:
     OFFSET_KNOB_MAX = 127        # knob 5: 0..127 ms, one ms per step
     OFFSET_FALLBACK = 45         # the chain's measured latency, when there are no runs to fit
     SONG_BASE_GAIN = 0.8
+    COUNT_OVER_DB = 3            # a song's count-in: this much over the backing's loud moments
 
     def song_gain(self, name):
         key, default = self.SONG_GAINS[name]
@@ -755,9 +756,18 @@ class App:
                 self.track_cache[key].gain = self.SONG_BASE_GAIN * self.song_gain(name)
                 out[name] = self.track_cache[key]
             # the count, 1 . 3 . | 1 2 3 4, its own track so the metronome's mode and level never mute it
+            # at the song's own level: its loudest hit COUNT_OVER_DB over the backing's loud moments in the
+            # first 30 s (at full scale it came in 10..18 dB over the music, "way too loud", 2026-11-08)
             key = ("count", chart.song, round(chart.bpm, 3))
             if key not in self.track_cache:
-                self.track_cache[key] = Track(render_count(chart, lead_in, SONG_COUNT_BEATS, SONG_COUNT), -lead_in, METRONOME_GAIN)
+                pcm = render_count(chart, lead_in, SONG_COUNT_BEATS, SONG_COUNT)
+                backing = out["backing"]
+                song_db = SND.loud_db(backing.pcm, -backing.t0, 30.0)
+                self.track_cache[key] = Track(pcm, -lead_in)
+                self.track_cache[key].count_db = (song_db, SND.loud_db(pcm, pct=100))
+            song_db, count_db = self.track_cache[key].count_db
+            backing_gain = self.SONG_BASE_GAIN * max(0.25, self.song_gain("backing"))
+            self.track_cache[key].gain = min(METRONOME_GAIN, 10 ** ((song_db + self.COUNT_OVER_DB - count_db) / 20) * backing_gain)
             out["count"] = self.track_cache[key]
         elif prog_index is not None:
             # triplet and sextuplet levels get the shuffle arrangement: the music must confirm the subdivision;
