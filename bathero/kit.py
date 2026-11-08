@@ -6,7 +6,7 @@ from .chart import DEFAULT_KIT, INSTRUMENT_ZONES, PADS, ZONE, ZONE_KEYS
 
 KIT_PATH = os.path.expanduser("~/.config/bathero/kit.json")
 SETTINGS_PATH = os.path.expanduser("~/.config/bathero/settings.json")
-DEFAULT_SETTINGS = {"audio_device": None, "fullscreen": True, "midi_trace": None, "offset_ms": 0.0, "drum_sounds": True,
+DEFAULT_SETTINGS = {"importer_on": True, "audio_device": None, "fullscreen": True, "midi_trace": None, "offset_ms": 0.0, "drum_sounds": True,
                     "capture_audio_device": "X18/XR18", "capture_audio_channels": [17, 18], "capture_camera": "iPhone",
                     "capture_pip": 0.28, "capture_corner": "br", "volume": 1.0, "metronome_volume": 1.0, "dyn_scale": 1.0, "dyn_scales": None, "coach_language": "es", "coach_model": None, "claude_bin": None,
                     "twitch_channel": "xantwav", "stream_height": 1080, "stream_kbps": 6000, "stream_url": None, "stream_bandwidth_test": False,

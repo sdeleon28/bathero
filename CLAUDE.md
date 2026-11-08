@@ -393,7 +393,7 @@ chip read "importer on" for the action and was taken for the state, so the user 
 importer that never ran: the chip now says "start importer" / "stop importer"); the inbox's
 unfinished songs are rows even while it is off ("waiting"; `Importer.waiting`, `ingest.todo`);
 **the floor tom or I** turns it on and off, remembered in settings
-(`importer_on`: on, the game starts it at launch); the song in hand is a grey row with its step
+(`importer_on`, default on since 2026-11-08: the game starts it at launch unless it was turned off); the song in hand is a grey row with its step
 ("transcribing the drums · 3/5 · 1:10") over a progress bar (steps weighted by `EXPECT_S`, a step
 never full until it ends), then the queued and the failed ones. `App.poll_importer` refreshes the
 list and toasts "song ready" when one finishes.
