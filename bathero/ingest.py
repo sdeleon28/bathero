@@ -171,7 +171,10 @@ def build_chart(title, beats, raw):
     first = downs[0] if downs else 0
     grid = [t for t, _ in beats[first:]]
     t0 = grid[0]
-    grid = [g - t0 for g in grid]
+    from .songs import smooth_grid
+    grid = smooth_grid([g - t0 for g in grid])        # beat_this's 20 ms frames out of the grid
+    t0 += grid[0]
+    grid = [g - grid[0] for g in grid]
     ibis = sorted(b - a for a, b in zip(grid, grid[1:]))
     bpm = 60 / ibis[len(ibis) // 2]
 
@@ -199,7 +202,7 @@ def build_chart(title, beats, raw):
         last[key] = t
         notes.append([round(t, 4), key, int(vel)])
     return {"title": title, "bpm": round(bpm, 2), "offset": round(t0, 4), "beats": [round(g, 4) for g in grid],
-            "notes": notes, "made": time.strftime("%Y-%m-%d %H:%M")}
+            "notes": notes, "made": time.strftime("%Y-%m-%d %H:%M"), "grid": "smooth"}
 
 
 def bar_starts(song):

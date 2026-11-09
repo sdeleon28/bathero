@@ -326,7 +326,7 @@ skipped when its file exists: Demucs `htdemucs_ft` two stems on MPS (`drums.wav`
 beat_this on the full mix (`beats.txt`: time, position in the bar), ADTOF on the drum stem
 (`drums.mid`, CPU only: its CLI refuses mps), then `song.json`: chart time 0 is the first
 downbeat (`offset` = where that is in the audio), the beat grid shifted with it (`Chart.beats`,
-so bars and phrases follow the song's own tempo), notes snapped to a sixteenth or triplet eighth
+so bars and phrases follow the song's own tempo), the beat grid smoothed (`songs.smooth_grid`: each beat on a least-squares line through the 13 around it, since 2026-11-09: beat_this's beats sit on 20 ms frames, so a bar's sixteenths were uneven by up to 20 ms; songs made before are re-gridded once at load, `songs.regrid`, `"grid": "smooth"`, the old file kept as `song.before-grid.json`), notes snapped to a sixteenth or triplet eighth
 within 35 ms, one instrument within 40 ms deduped. ADTOF knows kick, snare, tom, hi-hat, cymbal
 only: no open hats, no ride, no second crash. The first song (I Won't Back Down, 3 min): 67 s.
 

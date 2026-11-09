@@ -60,6 +60,52 @@ def difficulty(notes):
     return round(min(10.0, score / 2), 1)
 
 
+GRID_SMOOTH_BEATS = 6     # each beat refitted on a straight line through the 13 around it
+
+
+def smooth_grid(beats, w=GRID_SMOOTH_BEATS):
+    """beat_this's beat times sit on its 50 fps frames (20 ms steps: gaps of 0.36, 0.38, 0.40 s at
+    158 bpm), so a bar's sixteenths came out uneven by up to 20 ms. Each beat is refitted on a
+    least-squares line through its neighbours: even inside the bar, still following the band's
+    tempo across the song (a single constant tempo misses Come Out and Play by up to 225 ms)."""
+    b = np.asarray(beats, float)
+    if len(b) < 3:
+        return list(b)
+    i = np.arange(len(b))
+    out = b.copy()
+    for k in range(len(b)):
+        lo, hi = max(0, k - w), min(len(b), k + w + 1)
+        out[k] = np.polyval(np.polyfit(i[lo:hi], b[lo:hi], 1), k)
+    return [float(x) for x in out]
+
+
+def regrid(song):
+    """song.json onto the smoothed grid, once: every note keeps its place in the beat (beat index
+    and fraction on the old grid) and is re-timed on the new one. True when it changed."""
+    if song.get("grid") == "smooth" or not song.get("beats") or len(song["beats"]) < 3:
+        return False
+    old = np.asarray(song["beats"], float)
+    new = np.asarray(smooth_grid(old), float)
+    idx = np.arange(len(old))
+    shift = new[0]                                       # chart time 0 stays the first downbeat
+    new = new - shift
+    for n in song["notes"]:
+        pos = np.interp(n[0], old, idx, left=None, right=None)
+        if n[0] < old[0]:
+            pos = (n[0] - old[0]) / (old[1] - old[0])
+        elif n[0] > old[-1]:
+            pos = len(old) - 1 + (n[0] - old[-1]) / (old[-1] - old[-2])
+        t = (new[0] + pos * (new[1] - new[0]) if pos < 0 else
+             new[-1] + (pos - len(new) + 1) * (new[-1] - new[-2]) if pos > len(new) - 1 else
+             float(np.interp(pos, idx, new)))
+        n[0] = round(max(0.0, t), 4)
+    song["notes"].sort(key=lambda n: n[0])
+    song["beats"] = [round(float(x), 4) for x in new]
+    song["offset"] = round(song["offset"] + shift, 4)
+    song["grid"] = "smooth"
+    return True
+
+
 def load():
     """Every song folder with a song.json, as Charts (backing "song", the folder in Chart.song),
     easiest first (difficulty)."""
@@ -74,6 +120,14 @@ def load():
             s = json.load(open(p))
         except (OSError, ValueError):
             continue
+        if regrid(s):
+            import shutil
+            bak = os.path.join(SONGS_DIR, d, "song.before-grid.json")
+            if not os.path.exists(bak):
+                shutil.copyfile(p, bak)
+            with open(p + ".part", "w") as f:
+                json.dump(s, f)
+            os.replace(p + ".part", p)
         notes = [note_from(x) for x in s["notes"]]
         if not notes:
             continue
