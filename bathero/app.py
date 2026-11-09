@@ -1201,6 +1201,29 @@ class App:
         self.session_go()
         return True
 
+    def recall_level(self, name):
+        """Entering a level: its tempo and loop as they were the last time it was played
+        (asked 2026-11-09). A coach session sets its own tempo."""
+        st = self.settings.get("level_state", {}).get(name)
+        self.loop_range = self.loop_bars = None
+        self.loop_on = False
+        if not st:
+            return
+        if self.session is None and st.get("rate"):
+            self.rate = float(st["rate"])
+        self.loop_range = tuple(st["loop_range"]) if st.get("loop_range") else None
+        self.loop_bars = tuple(st["loop_bars"]) if st.get("loop_bars") else None
+        self.loop_on = bool(st.get("loop_on")) and (self.loop_range or self.loop_bars) is not None
+
+    def remember_level(self, name):
+        """The level's tempo and loop, saved whenever they change (a quit keeps them too)."""
+        st = {"rate": self.rate, "loop_range": list(self.loop_range) if self.loop_range else None,
+              "loop_bars": list(self.loop_bars) if self.loop_bars else None, "loop_on": self.loop_on}
+        states = self.settings.setdefault("level_state", {})
+        if states.get(name) != st:
+            states[name] = st
+            save_settings(self.settings)
+
     def session_go(self):
         cat, index, rate, reps, why, lead = self.session["items"][self.session["pos"]]
         self.rate, self.lead = rate, lead
@@ -3367,9 +3390,11 @@ class SoundcheckScreen(Screen):
 
 # ---------------------------------------------------------------------------
 class PlayScreen(Screen):
-    def __init__(self, app, cat, index):
+    def __init__(self, app, cat, index, fresh=True):
         super().__init__(app)
         self.cat, self.index = cat, index
+        if fresh:
+            app.recall_level(app.chart_for(cat, index).name)
         self.chart = app.chart_for(cat, index).at_rate(app.rate)
         self.lanes, self.by_note = build_lanes(self.chart, app.kit)
         # scroll speed follows the tempo so a beat is always the same distance on screen
@@ -3740,6 +3765,7 @@ class PlayScreen(Screen):
         """Hand the marked range to the game while the loop is on."""
         span = self.loop_span()
         self.game.set_loop(span[:2] if span is not None and self.app.loop_on else None)
+        self.app.remember_level(self.chart.name)
 
     def jump_to_loop(self):
         if self.app.loop_bars is not None:
@@ -3902,7 +3928,7 @@ class PlayScreen(Screen):
 
     def retry(self):
         self.leave()
-        self.app.go(PlayScreen(self.app, self.cat, self.index))
+        self.app.go(PlayScreen(self.app, self.cat, self.index, fresh=False))
 
     def next_level(self):
         self.leave()

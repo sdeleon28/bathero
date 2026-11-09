@@ -661,6 +661,12 @@ never clamp. `Chart.phrase_at` is None past the end; `Chart.place(t)` says "bar 
   number (drawn under the notes, the labels after them so a single lane does not hide them);
   the loop's start and end are lines in the loop's colour, and while the loop runs the start
   is drawn again at the end ("loop 3 again"), because that is where the notes come back to.
+- **A level remembers its tempo and loop** (asked 2026-11-09): `settings["level_state"][chart name]`
+  = rate, loop_range / loop_bars, loop_on, written by `App.remember_level` whenever `apply_loop`
+  runs (every loop change and every PlayScreen, so a tempo change's retry too), read by
+  `App.recall_level` when a level is entered (`PlayScreen(fresh=True)`; a retry passes False). A
+  coach session keeps its own tempo. A level never played keeps the current tempo, with no loop.
+  **While a loop runs, each lap scores alone** (`Game._reset_score` at the wrap).
 - The number keys are the transport only: playing the lanes from the keyboard (and the `K`
   toggle that swapped them) was removed on 2026-09-16, the game is played on the module.
   `KEY_LANES` stays as the digit map (the transport, the kit wizard's stand-in for a pad).
