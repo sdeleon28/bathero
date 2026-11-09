@@ -3439,36 +3439,6 @@ class PlayScreen(Screen):
         if play:
             g.toggle_pause()
 
-    def start_recording(self):
-        """Space with RECORD ARM on and a span: a bar of run-up, then everything played until the
-        span's end replaces its notes, quantised to the grid (songedit.apply_take). The guide is off
-        meanwhile: the notes being replaced must not play."""
-        ed, g, ch = self.editor, self.game, self.chart
-        t0 = ed.span[0]
-        ed.take.clear()
-        ed.sel = {}
-        self.rec_guide = g.guide
-        g.guide = False
-        g.seek(t0, t0 - ch.beat_time(ch.beat_pos(t0) - 4))
-        if g.paused:
-            g.toggle_pause()
-        ed.recording = True
-        self.app.runlog.add("record", span=list(ed.span))
-
-    def end_recording(self, keep=True):
-        ed, g = self.editor, self.game
-        ed.recording = False
-        if not g.paused:
-            g.toggle_pause()
-        g.guide = getattr(self, "rec_guide", g.guide)
-        if keep:
-            ed.apply_take()
-        else:
-            ed.take.clear()
-            self.app.toasts.add("recording cancelled", DIM, key="edit")
-        ed.armed = False
-        ed.view(ed.span[0])
-
     def on_mouse(self, ev):
         if self.editor is not None:
             self.editor.on_mouse(ev)
@@ -3515,21 +3485,11 @@ class PlayScreen(Screen):
     def on_note(self, note, velocity):        # MIDI thread: judge immediately while playing
         ed = self.editor
         if ed is not None:
-            # editing: every pad sounds, and is where the selection goes (or, recording, the take)
+            # editing: every pad sounds, and is where the selection goes
             inst = self.app.instrument_for(note)
             if inst is None or velocity < NAV_SOUND_MIN_VELOCITY:
                 return "edit"
             self.app.sounds.play(inst, velocity, 0.8)
-            if ed.recording:
-                art = self.app.ghosts.articulation_for(note)
-                if inst == "pedal":
-                    art = None                            # the pedal key is the chick already
-                elif art is None:
-                    zk = self.app.zone_for(note)
-                    art = "rim" if zk and C.ZONE[zk].part == "rim" else None
-                t = self.game.song_time() - self.game.offset_ms / 1000.0
-                ed.take.append((t, inst, velocity, art))
-                return 'record'
             if velocity >= NAV_MIN_VELOCITY:
                 ed.on_hit(inst, velocity)
             return "edit"
@@ -3571,13 +3531,7 @@ class PlayScreen(Screen):
         g = self.game
         ed = self.editor
         if ed is not None:
-            if ed.recording:
-                if key == pygame.K_ESCAPE:
-                    self.end_recording(keep=False)
-                return True
-            if key == pygame.K_SPACE and ed.armed and ed.span:
-                self.start_recording()
-            elif ed.on_key(key):
+            if ed.on_key(key):
                 pass
             elif key == pygame.K_e:
                 self.stop_editing()
@@ -3588,6 +3542,14 @@ class PlayScreen(Screen):
                     self.stop_editing()
             elif key == pygame.K_SPACE:
                 self.stop_editing(play=True)
+            elif key in KEY_LANES:
+                bounds = self.phrases()
+                i = KEY_LANES[key]
+                if i < len(bounds) - 1:
+                    ed.view(bounds[i])
+                    self.app.toasts.add(f"phrase {(i + 1) % 10}  ·  {self.chart.place(bounds[i])}", ACCENT, key="phrase")
+                else:
+                    self.app.toasts.add(self.no_phrase(i, len(bounds) - 1), DIM, key="phrase")
             return True
         if key == pygame.K_e:
             self.start_editing()
@@ -3640,8 +3602,21 @@ class PlayScreen(Screen):
                                  else "practice off: this run counts"), ACCENT, key="practice")
         elif g.finished:
             pass                                          # the results screen is no place for the transport
+        elif key == pygame.K_l:
+            self.loop_digits, self.loop_at = [], time.perf_counter()
         elif key == pygame.K_BACKSLASH:
             self.toggle_loop()
+        elif key in KEY_LANES:
+            i = KEY_LANES[key]                            # 1..9, 0 -> phrases 0..9
+            if self.loop_digits is None:
+                self.phrase_jump(i)
+            else:
+                self.loop_digits.append(i)
+                self.loop_at = time.perf_counter()
+                if len(self.loop_digits) == 2:
+                    a, b = self.loop_digits
+                    self.loop_digits = None
+                    self.set_loop(a, b)
         return True
 
     # --- transport ---------------------------------------------------------------
@@ -3777,19 +3752,8 @@ class PlayScreen(Screen):
                     self.app.toasts.add("loop: the first pad, then the last", ACCENT, key="loop")
             return
         if kind == "side":
-            if name == "arm":
-                ed = self.editor
-                if ed is None or ed.recording:
-                    return
-                if not ed.span:
-                    self.app.toasts.add("record arm: select a section first (tool 2, drag on the highway)", DIM, key="edit")
-                    return
-                ed.armed = not ed.armed
-                self.app.toasts.add("armed · space records the selection" if ed.armed else "disarmed", ACCENT, key="edit")
-            elif name == "stop":
-                if self.editor is not None and self.editor.recording:
-                    self.end_recording()
-                elif self.editor is not None:
+            if name == "stop":
+                if self.editor is not None:
                     self.stop_editing(play=True)
                 elif self.armed:
                     self.start(by="launchpad")
@@ -3838,11 +3802,7 @@ class PlayScreen(Screen):
         if span is not None:
             loop_bars = (int(round(ch.beat_pos(span[0]) / 4)), int(round(ch.beat_pos(span[1]) / 4)))
         ex.grid(colours, loop_bars, bar, ch.key, lead, groups)
-        fr = ex.frame(playing, self.app.loop_on and span is not None)
-        ed = self.editor
-        if ed is not None and (ed.armed or ed.recording):
-            fr[("note", LP.SIDE_NOTE["arm"])] = (LP.ARM_COLOR, ed.recording)
-        return fr
+        return ex.frame(playing, self.app.loop_on and span is not None)
 
     def to_list(self):
         self.leave()
@@ -3929,13 +3889,7 @@ class PlayScreen(Screen):
 
     def update(self):
         if self.editor is not None:
-            ed = self.editor
-            if ed.recording:
-                self.game.update()
-                if self.game.song_time() >= ed.span[1]:
-                    self.end_recording()
-                return
-            ed.update()
+            self.editor.update()
             return
         if self.armed:
             if self.start_at is not None:

@@ -57,12 +57,6 @@ class SongEditor:
         self.keys = {l.key for l in screen.game.lanes}   # lanes stay while editing, even emptied
         self.last_click = (0.0, None)
         self.saved = 0
-        self.tool = 1                      # 1 the cursor, 2 the time selection
-        self.span = None                   # (t0, t1): the time selection, the section a recording replaces
-        self.span_drag = None              # the selection's anchor time while it is drawn
-        self.armed = False                 # the Launchpad's RECORD ARM: space records over the span
-        self.recording = False
-        self.take = deque()                # (chart t, key, velocity, art) heard while recording (MIDI thread)
 
     # --- geometry -------------------------------------------------------------------------
     @property
@@ -277,12 +271,6 @@ class SongEditor:
 
     def on_mouse(self, ev):
         shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
-        if self.recording:
-            return
-        if self.tool == 2 and ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEMOTION, pygame.MOUSEBUTTONUP) \
-                and getattr(ev, "button", 1) in (1, 3):
-            self.span_mouse(ev)
-            return
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             self.press_left(ev.pos, shift)
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
@@ -301,62 +289,6 @@ class SongEditor:
                 self.scroll(dy * 40 * self.r.s)
                 if self.drag is not None:
                     self.motion(pygame.mouse.get_pos())
-
-    # --- the time selection (tool 2) and recording over it --------------------------------------
-    def span_mouse(self, ev):
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
-            self.span, self.armed = None, False
-            return
-        if ev.type == pygame.MOUSEBUTTONDOWN:
-            t = max(0.0, self.snap(self.t_at(ev.pos[1])))
-            self.span_drag = t
-            self.span = (t, t)
-        elif ev.type == pygame.MOUSEMOTION and self.span_drag is not None:
-            t = max(0.0, self.snap(self.t_at(ev.pos[1])))
-            self.span = (min(t, self.span_drag), max(t, self.span_drag))
-        elif ev.type == pygame.MOUSEBUTTONUP and self.span_drag is not None:
-            self.span_drag = None
-            if self.span[1] - self.span[0] < 0.02:
-                self.span, self.armed = None, False
-            else:
-                ch = self.chart
-                self.screen.app.toasts.add(f"selected {ch.place(self.span[0])} to {ch.place(self.span[1])}"
-                                           " · RECORD ARM, then space", (80, 200, 230), key="edit")
-
-    def quant_sub(self):
-        return GRIDS[self.grid][0] or 4
-
-    def quantize(self, t):
-        sub, ch = self.quant_sub(), self.chart
-        return ch.beat_time(round(ch.beat_pos(t) * sub) / sub)
-
-    def take_notes(self):
-        """The take quantised to the grid, inside the span, one note per drum per slot (the loudest)."""
-        t0, t1 = self.span
-        best = {}
-        for t, key, vel, art in list(self.take):
-            q = self.quantize(t)
-            if not (t0 - 1e-4 <= q < t1 - 1e-4):
-                continue
-            k = (key, round(q, 4))
-            if k not in best or vel > best[k][2]:
-                best[k] = (q, key, vel, art)
-        return [ChartNote(t=q, key=key, velocity=vel, art=art) for q, key, vel, art in best.values()]
-
-    def apply_take(self):
-        """Replace the span's notes with the take's."""
-        t0, t1 = self.span
-        new = self.take_notes()
-        self.take.clear()
-        self.remember()
-        old = [n for n in self.game.notes if t0 - 1e-4 <= n.t < t1 - 1e-4]
-        gone = {id(n) for n in old}
-        self.game.notes[:] = [n for n in self.game.notes if id(n) not in gone] + new
-        if not self.game.notes:
-            self.restore(self.undo.pop())
-            return
-        self.sel = {}
-        self.commit(f"recorded {len(new)} notes over {len(old)} · {GRIDS[self.grid][1] if GRIDS[self.grid][0] else '1/16'} · ⌘Z undoes")
 
     def press_left(self, pos, shift):
         n = self.note_at(pos)
@@ -462,10 +394,6 @@ class SongEditor:
                 n.flam = on
             self.commit()
             app.toasts.add(f"flam {'on' if on else 'off'} · {len(self.sel)} notes", (80, 200, 230), key="edit")
-        elif key in (pygame.K_1, pygame.K_2) and not cmd:
-            self.tool = 1 if key == pygame.K_1 else 2
-            app.toasts.add("tool 1 · cursor" if self.tool == 1 else "tool 2 · time selection: drag to select a section",
-                           (80, 200, 230), key="edit")
         elif key == pygame.K_g:
             self.grid = (self.grid + 1) % len(GRIDS)
             app.toasts.add(f"grid {GRIDS[self.grid][1]}", (80, 200, 230), key="edit")
@@ -504,14 +432,6 @@ class SongEditor:
             else:
                 col, wd = (32, 32, 40), 1
             pygame.draw.line(surf, col, (x0, y), (x1, y), wd)
-        if self.span is not None:
-            ya, yb = int(r.y_for(self.span[1], now)), int(r.y_for(self.span[0], now))
-            colour = (230, 60, 60) if self.armed or self.recording else (80, 200, 230)
-            band = pygame.Surface((x1 - x0, max(1, yb - ya)), pygame.SRCALPHA)
-            band.fill((*colour, 70 if self.recording else 40))
-            surf.blit(band, (x0, ya))
-            pygame.draw.line(surf, colour, (x0, ya), (x1, ya), 2)
-            pygame.draw.line(surf, colour, (x0, yb), (x1, yb), 2)
 
     def draw_notes(self, surf, now):
         r, S = self.r, self.r.s
@@ -527,15 +447,6 @@ class SongEditor:
                 pygame.draw.rect(surf, colour, rect, border_radius=int(6 * S))
                 if accent:
                     pygame.draw.rect(surf, (255, 255, 255), rect, 2, border_radius=int(6 * S))
-        if self.recording:                                 # the take so far, quantised, as outlines
-            index = {l.key: i for i, l in enumerate(self.game.lanes)}
-            for n in self.take_notes():
-                if n.key in index:
-                    w = r.lane_w * 0.8
-                    x = r.lane_x[index[n.key]] + (r.lane_w - w) / 2
-                    y = r.y_for(n.t, now)
-                    pygame.draw.rect(surf, (255, 255, 255), (x, int(y - 8 * S), w, int(16 * S)), max(2, int(2 * S)),
-                                     border_radius=int(6 * S))
         if self.marquee is not None:
             x0, y0, x1, y1 = self.marquee
             rect = pygame.Rect(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
@@ -547,17 +458,12 @@ class SongEditor:
 
     def draw_card(self, surf, now):
         r, f, S = self.r, self.r.f, self.r.s
-        if self.recording:
-            f.center(surf, f"● RECORDING  ·  {self.chart.place(max(now, 0.0))}  ·  quantised to "
-                     f"{GRIDS[self.grid][1] if GRIDS[self.grid][0] else '1/16'}  ·  Esc cancels", f.mid, (230, 60, 60), 178 * S)
-            return
-        tool = "cursor" if self.tool == 1 else "time selection" + ("  ·  ARMED, space records" if self.armed else "")
-        lines = [f"EDITING  ·  tool {self.tool} {tool}  ·  {self.chart.place(now)}  ·  grid {GRIDS[self.grid][1]}  ·  "
+        lines = [f"EDITING  ·  {self.chart.place(now)}  ·  grid {GRIDS[self.grid][1]}  ·  "
                  + (f"{len(self.sel)} selected" if self.sel else "nothing selected")
                  + (f"  ·  zoom {self.zoom:.2g}x" if self.zoom != 1.0 else ""),
                  "click select  ·  shift-click add  ·  drag move  ·  drag empty: marquee  ·  double-click add",
                  "right-click or ⌫ delete  ·  hit a drum: the selection goes there  ·  ↑↓ nudge  ·  ←→ lane",
-                 "G grid  ·  ⌘Z undo  ·  wheel scroll, ⌘ wheel zoom  ·  1 cursor  ·  2 time selection  ·  E done  ·  space play / record"]
+                 "G grid  ·  ⌘Z undo  ·  wheel scroll, ⌘ wheel zoom  ·  1..0 phrases  ·  E done  ·  space play"]
         y = 178 * S
         back = pygame.Surface((int(min(r.w - 20 * S, 900 * S)), int(84 * S)))
         back.fill((14, 14, 18))
