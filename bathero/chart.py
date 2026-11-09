@@ -1297,9 +1297,37 @@ POP_PUNK = [
     ], bars=32, backing="punk"),
 ]
 
+# --- Even eighths (asked 2026-11-09): measured on Come Out and Play, the hat's on-beat eighths came
+# 13 ms late and the &s 19 ms early, every lap, the original drummer straight. The course puts the &
+# in the middle of the beat: first alone against the kick on the beat, then the beat alone, then the
+# two together under a groove, then the song's own kick on the &, climbing to its tempo.
+_Q_KK = "x...x...x...x..."
+_HH8 = "x.x.x.x.x.x.x.x."
+EIGHTHS = [
+    _groove("Eighths 1 · The & alone", "Hat only on the &, kick on every beat: the & exactly halfway between two kicks.",
+            90, [{"hh": "..x...x...x...x.", "kk": _Q_KK}], bars=16),
+    _groove("Eighths 2 · Beat and & apart", "Hat on the beat for two bars, on the & for two: the same distance from the kick either way.",
+            90, [{"hh": "x...x...x...x...", "kk": _Q_KK}, {"hh": "x...x...x...x...", "kk": _Q_KK},
+                 {"hh": "..x...x...x...x.", "kk": _Q_KK}, {"hh": "..x...x...x...x.", "kk": _Q_KK}], bars=16),
+    _groove("Eighths 3 · Even under the kick", "Every eighth on the hat, kick on every beat: the kick shows where the beat is, the & falls in the gap.",
+            100, [{"hh": _HH8, "kk": _Q_KK}], bars=16),
+    _groove("Eighths 4 · Even on their own", "Every eighth on the hat, kick on 1 only: nothing marks the & but the click.",
+            110, [{"hh": _HH8, "kk": "x..............."}], bars=16),
+    _groove("Eighths 5 · Rock beat, even hat", "The plain rock beat: the snare on 2 and 4 must not pull the hat around it.",
+            115, [{"hh": _HH8, "kk": "x.......x.......", "sn": "....x.......x..."}], bars=16),
+    _groove("Eighths 6 · The kick on the &", "Come Out and Play's kick: 1, the & of 2, 4. The & kick and the & hat land together.",
+            120, [{"hh": _HH8, "kk": "x.....x.....x...", "sn": "....x.......x..."}], bars=16),
+    _groove("Eighths 7 · Song groove at 140", "The same groove faster: keep the & in the middle as the tempo climbs.",
+            140, [{"hh": _HH8, "kk": "x.....x.....x...", "sn": "....x.......x..."}], bars=16, backing="punk"),
+    _groove("Eighths 8 · Song groove at 158", "Come Out and Play's tempo. Even eighths, nothing rushed.",
+            158, [{"hh": _HH8, "kk": "x.....x.....x...", "sn": "....x.......x..."}], bars=32, backing="punk"),
+]
+
 COURSES = [
     Course("course:pop-punk", "Pop punk", "the driving eighths, the push, the crash wash, the skank, stabs, the build, half time, kick doubles; fills from eighths to the whole kit, each one drilled on its own before the level that plays it",
            POP_PUNK),
+    Course("course:eighths", "Even eighths", "the & exactly halfway: alone against the kick, then the whole line, then under the song's groove up to its tempo",
+           EIGHTHS),
 ]
 COURSE = {c.key: c for c in COURSES}
 

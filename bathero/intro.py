@@ -177,6 +177,38 @@ INTROS = {
         "Bombo, redoblante, bombo, redoblante: alternando en cada tiempo, un poco más rápido.",
         ["Mismo patrón que el anterior a 85 bpm.",
          "Pie y mano parejos: el bombo suele salir tarde respecto de la mano."]),
+    "Eighths 1 · The & alone": (
+        "Solo el & en el hi-hat, el bombo en cada tiempo: el & va exactamente en la mitad entre dos bombos.",
+        ["Medido en Come Out and Play: tus & llegaban 19 ms antes. Esperalo: es la mitad, no un poco antes.",
+         "Escuchá el hueco: bombo, hat, bombo, hat, todos a la misma distancia."]),
+    "Eighths 2 · Beat and & apart": (
+        "Dos compases el hi-hat en el tiempo, dos en el &. La distancia al bombo tiene que ser la misma.",
+        ["En el tiempo, el hat cae junto con el bombo: un solo golpe, no un flam.",
+         "Al pasar al &, no te apures: es medio tiempo después, entero."]),
+    "Eighths 3 · Even under the kick": (
+        "Todas las corcheas en el hi-hat, el bombo en cada tiempo.",
+        ["El tiempo te llegaba 13 ms tarde y el & 19 ms antes: largo, corto, largo, corto. Buscá corto = largo.",
+         "La mano baja igual para las dos: misma altura, mismo movimiento."]),
+    "Eighths 4 · Even on their own": (
+        "Todas las corcheas, el bombo solo en el 1: el click es lo único que marca el tiempo.",
+        ["Subí el metrónomo: es la referencia de este nivel.",
+         "Si el & se adelanta, el tiempo siguiente se atrasa para compensar: mirá los dos."]),
+    "Eighths 5 · Rock beat, even hat": (
+        "El beat de rock: hat en corcheas, bombo en 1 y 3, redoblante en 2 y 4.",
+        ["El redoblante no tiene que arrastrar al hat: el & después del redoblante sigue en su lugar.",
+         "Dos manos a la vez en el 2 y el 4: que caigan juntas."]),
+    "Eighths 6 · The kick on the &": (
+        "El bombo de Come Out and Play: 1, el & del 2, el 4. El bombo del & y el hat del & caen juntos.",
+        ["Tu bombo del & llegaba 11 ms antes: el pie también espera la mitad.",
+         "Pie y mano juntos en el &: un solo golpe."]),
+    "Eighths 7 · Song groove at 140": (
+        "El mismo groove más rápido, con banda.",
+        ["Más rápido no es apurar: el & sigue en la mitad.",
+         "Si se desarma, volvé al nivel anterior y subí el tempo con ]."]),
+    "Eighths 8 · Song groove at 158": (
+        "El groove de Come Out and Play a su tempo, 32 compases.",
+        ["Corcheas parejas, nada adelantado.",
+         "Después de este, volvé a la canción y mirá si los PERFECT suben."]),
     "Hi-hat eighths": (
         "Hi-hat en cada corchea: la mano derecha llevando el tiempo sola.",
         ["Sesenta y cuatro golpes seguidos: relajá el brazo, el movimiento sale de la muñeca.",

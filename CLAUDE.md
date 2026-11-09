@@ -300,6 +300,12 @@ crash wash, the skank, fills from eighths to the whole kit, the & crash, stabs, 
 build, kick doubles, the ride bridge, the whole-bar fills, a 32-bar anthem. Adding a genre: a
 list of levels plus one `Course(...)` in `COURSES`; nothing else.
 
+**Even eighths** (`EIGHTHS`, `course:eighths`, asked 2026-11-09): on Come Out and Play the hat's
+on-beat eighths came 13 ms late and the &s 19 ms early, lap after lap (the original drummer straight,
+checked against the stem), which no offset fixes. Eight levels, 90..158 bpm: the & alone against the
+kick on the beat, beat and & in alternate pairs of bars, all eighths under the kick, then over the
+click only, the rock beat, the song's kick (1, & of 2, 4), up to the song's tempo with the punk band.
+
 **A fill is drilled before it is used** (asked for 2026-09-22, "aprender el vocabulario antes
 de aplicarlo a través de la repetición", one level per fill): every fill the course introduces
 gets a `_drill(...)` level of its own ahead of the level that plays it — two bars looping
