@@ -40,6 +40,21 @@ HAND_COLORS = {"R": (245, 90, 90), "L": (80, 200, 230)}   # the sticking strip's
 DOUBLE_TICK = 14          # the bracket's ticks reach this far over the notes (px at scale 1)
 
 
+# an imported song's sections on screen: the Launchpad's colours (launchpad.SECTION_COLORS) as RGB
+SECTION_RGB = {"intro": (60, 200, 230), "verse": (70, 200, 90), "pre-chorus": (240, 110, 170),
+               "chorus": (235, 60, 60), "bridge": (70, 110, 240), "outro": (70, 110, 240),
+               "break": (150, 90, 230), "solo": (240, 210, 60), "inst": (220, 70, 220)}
+OTHER_SECTION_RGB = (220, 70, 220)
+MOOD_BG = 0.14          # how far the background leans to the section's colour
+MOOD_LANE = 0.09        # ... and the lanes
+MOOD_GLOW = 42          # peak of the drifting glows, out of 255, added over everything but the notes
+MOOD_FADE_S = 1.5       # a new section's colour takes this long to settle
+
+
+def section_rgb(label):
+    return SECTION_RGB.get(label, OTHER_SECTION_RGB)
+
+
 def lerp(a, b, k):
     k = max(0.0, min(1.0, k))
     return tuple(int(a[i] + (b[i] - a[i]) * k) for i in range(3))
@@ -305,16 +320,20 @@ class Renderer:
             loop, count_in_end = g.loop, g.count_in_end
             score, combo, counts, offset, speed = g.score, g.combo, dict(g.counts), g.offset_ms, g.speed
 
-        surf.fill(BG)
+        mood = self.mood_colour(now, wall)
+        surf.fill(lerp(BG, mood, MOOD_BG) if mood else BG)
+        lane_bg = lerp(LANE_BG, mood, MOOD_LANE) if mood else LANE_BG
         for i, lane in enumerate(g.lanes):
             x = int(self.lane_x[i])
-            pygame.draw.rect(surf, LANE_BG, (x, 0, int(self.lane_w) - 2, self.h))
+            pygame.draw.rect(surf, lane_bg, (x, 0, int(self.lane_w) - 2, self.h))
             pygame.draw.line(surf, LANE_EDGE, (x, 0), (x, self.h))
             cx = x + self.lane_w / 2
             f.center(surf, lane.label, f.small, lane.color, self.line_y + 34 * S, cx)
             sub = "/".join(map(str, sorted(lane.notes))) if lane.notes else "no pad assigned"
             f.center(surf, sub, f.small, DIM if lane.notes else JUDGE_COLORS["MISS"], self.line_y + 52 * S, cx)
 
+        if mood:
+            self.mood_glow(surf, mood, wall)
         # flashes: lane glow first so notes draw on top
         for fl in flashes:
             age = (wall - fl.wall_t) / FLASH_S
@@ -579,6 +598,97 @@ class Renderer:
                 f.center(surf, f"loop {label} off", f.mid, DIM, y)
                 f.center(surf, "\\ starts it again", f.small, DIM, y + 24 * S)
 
+    def mood_colour(self, now, wall):
+        """The colour of the song's section under the playhead, eased over MOOD_FADE_S so a
+        section change is a slow shift of light, not a cut. None for a level without sections."""
+        spans = self.game.chart.section_spans()
+        if not spans:
+            return None
+        lab = spans[0][2]
+        for a, b, l in spans:
+            if now >= a:
+                lab = l
+        want = section_rgb(lab)
+        cur, last = getattr(self, "_mood", None), getattr(self, "_mood_t", wall)
+        self._mood_t = wall
+        if cur is None:
+            cur = want
+        else:
+            k = min(1.0, (wall - last) / MOOD_FADE_S * 3)
+            cur = tuple(c + (w - c) * k for c, w in zip(cur, want))
+        self._mood = cur
+        return tuple(int(c) for c in cur)
+
+    def mood_glow(self, surf, rgb, wall):
+        """Three wide soft glows drifting on slow Lissajous paths (periods of 20..40 s), in the
+        section's colour, added faintly over the floor: the screen breathes without anything
+        to look at. Drawn at a sixteenth of the size and smooth-scaled, refreshed ten times a second."""
+        if getattr(self, "_glow_at", 0) > wall - 0.1 and getattr(self, "_glow_rgb", None) == rgb \
+                and getattr(self, "_glow_size", None) == (self.w, self.h):
+            surf.blit(self._glow, (0, 0), special_flags=pygame.BLEND_ADD)
+            return
+        if getattr(self, "_glow_sprite", None) is None:
+            sp = pygame.Surface((64, 64))
+            for r in range(32, 0, -1):                 # a radial falloff, brightest in the middle
+                v = int(255 * (1 - r / 32) ** 2)
+                pygame.draw.circle(sp, (v, v, v), (32, 32), r)
+            self._glow_sprite = sp
+        sw, sh = max(8, self.w // 16), max(8, self.h // 16)
+        small = pygame.Surface((sw, sh))
+        k = MOOD_GLOW / 255
+        tint = tuple(int(c * k) for c in rgb)
+        for i, (px, py, ph) in enumerate(((23.0, 31.0, 0.0), (37.0, 19.0, 2.1), (29.0, 41.0, 4.2))):
+            cx = sw * (0.5 + 0.42 * math.sin(wall * 2 * math.pi / px + ph))
+            cy = sh * (0.5 + 0.38 * math.sin(wall * 2 * math.pi / py + ph * 1.7))
+            size = int(sh * (1.1 + 0.25 * math.sin(wall / 7 + i)))
+            sp = pygame.transform.smoothscale(self._glow_sprite, (size, size))
+            sp.fill(tint, special_flags=pygame.BLEND_MULT)
+            small.blit(sp, (cx - size / 2, cy - size / 2), special_flags=pygame.BLEND_ADD)
+        self._glow = pygame.transform.smoothscale(small, (self.w, self.h))
+        self._glow_at, self._glow_rgb, self._glow_size = wall, rgb, (self.w, self.h)
+        surf.blit(self._glow, (0, 0), special_flags=pygame.BLEND_ADD)
+
+    def section_bar(self, surf, now, loop, count_in_end, spans):
+        """The ruler of a song with sections: one cell per section, as wide as it lasts, named
+        and filled with its colour; the one playing lit, the loop framed, the playhead over it."""
+        g, f, S = self.game, self.f, self.s
+        span = self.transport.get("span")
+        landing = count_in_end is not None and now < count_in_end
+        pos = count_in_end if landing else now
+        W = min(self.w - 240 * S, 900 * S)
+        x0, H = self.w / 2 - W / 2, 26 * S
+        y = self.line_y + 60 * S
+        t0, t1 = spans[0][0], spans[-1][1]
+
+        def X(t):
+            return x0 + (max(t0, min(t, t1)) - t0) / max(1e-6, t1 - t0) * W
+
+        for a, b, lab in spans:
+            xa, xb = X(a), X(b)
+            box = pygame.Rect(int(xa), int(y), max(1, int(xb) - int(xa)), int(H))
+            col = section_rgb(lab)
+            here = a <= pos < b
+            pygame.draw.rect(surf, lerp(LANE_BG, col, 0.85 if here else 0.38), box)
+            pygame.draw.line(surf, BG, (int(xa), int(y)), (int(xa), int(y + H)), max(1, int(2 * S)))
+            ts = f.text(lab, f.tiny, (15, 15, 20) if here else lerp(TEXT, col, 0.3))
+            if ts.get_width() <= box.w - 4 * S:
+                surf.blit(ts, ((xa + xb) / 2 - ts.get_width() / 2, y + H / 2 - ts.get_height() / 2))
+            elif box.w >= 10 * S:
+                ts = f.text(lab[:1].upper(), f.tiny, (15, 15, 20) if here else TEXT)
+                surf.blit(ts, ((xa + xb) / 2 - ts.get_width() / 2, y + H / 2 - ts.get_height() / 2))
+        pygame.draw.rect(surf, DIM, pygame.Rect(int(x0), int(y), int(W), int(H)), 1)
+        if span is not None:
+            frame = pygame.Rect(int(X(span[0]) - 2 * S), int(y - 3 * S),
+                                int(X(span[1]) - X(span[0]) + 4 * S), int(H + 6 * S))
+            pygame.draw.rect(surf, self.loop_colour(loop), frame, max(1, int(2 * S)), border_radius=int(4 * S))
+        px = int(X(pos))
+        pygame.draw.line(surf, BG, (px, int(y - 6 * S)), (px, int(y + H + 6 * S)), max(3, int(6 * S)))
+        pygame.draw.line(surf, TEXT, (px, int(y - 5 * S)), (px, int(y + H + 5 * S)), max(1, int(2 * S)))
+        if landing or now >= 0:
+            ts = f.text(f"{g.chart.place(pos)} of {g.chart.bars}", f.tiny, ACCENT if landing else DIM)
+            surf.blit(ts, (x0 + W + 8 * S, y + H / 2 - ts.get_height() / 2))
+        f.center(surf, "1-0 jump to a phrase  ·  l35 loop 3-5  ·  \\ loop on/off", f.small, DIM, y + H + 14 * S)
+
     def transport_bar(self, surf, now, loop, count_in_end=None):
         """The ruler under the lanes: ten slots of one width, one per number key, the
         level's phrases in the first ones and the rest empty; the playhead sweeps the
@@ -587,6 +697,9 @@ class Renderer:
         run-up to a jump the ruler already shows where it lands (the key's slot lit, the
         playhead parked at its start): otherwise pressing 3 lights slot 2 for a bar."""
         g, f, S = self.game, self.f, self.s
+        spans = g.chart.section_spans()
+        if spans:
+            return self.section_bar(surf, now, loop, count_in_end, spans)
         tr = self.transport
         bounds = g.chart.phrase_bounds()
         n = len(bounds) - 1

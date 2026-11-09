@@ -334,6 +334,19 @@ class Chart:
         self._phrase_cache = (count, out)
         return out
 
+    def section_spans(self):
+        """An imported song's sections as [(start, end, label)] in chart time, or []."""
+        if not self.sections:
+            return []
+        cached = getattr(self, "_section_cache", None)
+        if cached is not None:
+            return cached
+        starts = [b for b, _ in self.sections] + [self.bars]
+        out = [(self.beat_time(4 * starts[i]), self.beat_time(4 * starts[i + 1]), lab)
+               for i, (_, lab) in enumerate(self.sections) if starts[i + 1] > starts[i]]
+        self._section_cache = out
+        return out
+
     def phrase_at(self, t: float, count=PHRASE_KEYS):
         """Index of the phrase holding chart time t (the first one during the count-in);
         None past the end of the level."""
