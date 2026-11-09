@@ -488,6 +488,16 @@ per 10 ms, and re-reads the songs course so a retry plays the edit. E / Esc done
 parks a bar before the view), space or the Launchpad's STOP done and play. A run that was edited
 is a rehearsal (it seeked).
 
+**Tools and recording a section** (asked for 2026-11-09, for the sections ADTOF gets wrong): in the editor
+**1** is the cursor (everything above) and **2** the time selection: a drag on the highway draws a band
+across every lane (snapped to the grid; right-click clears it). The Launchpad's side **RECORD ARM** arms it
+(red; needs a band), **space** then records: a bar of run-up, the guide off, the song and metronome on,
+and every pad heard until the band's end (`ed.take`, chart time minus the offset) replaces the band's
+notes when it ends, **quantised strictly to the grid** (G; off counts as 1/16), one note per drum per
+slot (the loudest), with the hi-hat's articulation (`articulation_for`), rim on snare / toms and the
+pedal chick as the "pedal" key. Esc cancels, STOP ends early (keeps), cmd Z undoes the take. The take
+shows as white outlines while it records; the ARM button blinks.
+
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
 
 Asked for 2026-09-20 (the gallop under a synth pop backing drawn by index "had nothing to do
@@ -627,14 +637,14 @@ never clamp. `Chart.phrase_at` is None past the end; `Chart.place(t)` says "bar 
   stopped so `_drive_tracks` restarts them at the new position (`Track.start_at` already
   played from any point, for pause/resume). It sets `seeked`, which is what makes the run a
   rehearsal.
-- **`1`..`9`, `0` jump** to phrases 1..10 with one bar of run-up (`count_in_end`): the chart
+- **Removed 2026-11-09** (the Launchpad's explorer does it better; the digits are the song editor's tools now): `1`..`9`, `0` jumped to phrases 1..10 with one bar of run-up (`count_in_end`): the chart
   is silent through it, the metronome and the backing keep playing, so the first notes of
   the phrase come down the screen instead of landing on the line. **Through the run-up the
   screen shows the landing, not the bar being crossed** (2026-09-16: pressing 3 lit cell 2
   for a bar and the huge count digits read as "the number I pressed"): the ruler lights the
   key's cell with the playhead parked at its start, the centre says "phrase 3" over a
   smaller "in 4 .. in 1", and phrase markers before the landing are not drawn.
-- **`l` + two digits** marks and starts a loop (`l35` = phrases 3 to 5, inclusive; `l33` one
+- **`l` + two digits** (removed 2026-11-09 with the digits) marked and starts a loop (`l35` = phrases 3 to 5, inclusive; `l33` one
   phrase; reversed digits are sorted). The pending gesture lapses after `LOOP_GESTURE_S`.
   `\` switches the marked loop off and on. The loop lives in the App (`loop_range`,
   `loop_on`) so it survives the restart `[` and `]` cause, and is cleared when the level is

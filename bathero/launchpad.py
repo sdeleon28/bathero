@@ -42,6 +42,7 @@ PAGE_SIZE = 64
 TOP = {104: "up", 105: "down", 106: "left", 107: "right", 108: "session", 109: "user1", 110: "user2", 111: "mixer"}
 SIDE = {89: "volume", 79: "pan", 69: "send_a", 59: "send_b", 49: "stop", 39: "mute", 29: "solo", 19: "arm"}
 TOP_CC = {v: k for k, v in TOP.items()}
+ARM_COLOR = 5                  # red: RECORD ARM while editing a song (blinks while recording)
 SIDE_NOTE = {v: k for k, v in SIDE.items()}
 HOLD_S = 0.5
 RESOLUTIONS = (1, 2, 4, 8, 16, 32)
