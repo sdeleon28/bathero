@@ -359,7 +359,11 @@ GroupCtl's numbering (1 bottom left, left to right, a row up every four, 16 top 
 song's tempo down to 126 bpm slower, never under rate 0.3; once the knob rests 0.4 s the stems
 are stretched in a thread and the song restarts there), 5 offset (0..127 ms, one per step,
 `App.set_offset`, which `,` `.` use too), 15 menu music (`menu_music_volume`, under the master),
-16 everything (`volume`). **Pushing an encoder resets it**
+16 everything (`volume`). **The bank's map on screen** (asked for 2026-11-08, `App.draw_twister`): any turn or push of a bank-2
+knob, or a push or turn of one of its dark knobs, shows the 4 x 4 bank centred (name, ring, value, the knob in
+hand framed) until 3 s after the last touch, and the knobs' toasts are muted (`Toasts.muted`): toasts are for
+discrete keys. Audio knobs apply at once; the tempo shows the pending bpm ("release to apply", then
+"stretching...") and the map stays while it is pending. **Pushing an encoder resets it**
 (channel 2, 127 down): backing 100 %, drum stem 0 (you are the drummer), metronome 100 % (its
 default), tempo the song's own, menu music and everything 100 %, offset the pooled fit of the recent runs
 (`latency.pooled` over `recent_curves`, in a thread; 45 ms when there are none). **LEDs** as

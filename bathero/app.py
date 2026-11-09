@@ -42,7 +42,7 @@ from . import ghost as GH
 from . import intro as IN
 from . import keygen
 from . import songs as SG
-from .twister import Twister, PORT_HINT as TWISTER_HINT
+from .twister import Twister, PORT_HINT as TWISTER_HINT, KNOBS as TW_KNOBS
 from . import launchpad as LP
 from . import songedit as SE
 from . import importer as IM
@@ -138,6 +138,7 @@ class App:
         self.launchpad_checked = 0.0
         self.lp_repaint_at = None
         self.twister_checked = 0.0
+        self.tw_seen = None          # (wall time, knob name or None): the bank-2 overlay (draw_twister) shows until 3 s after
         self.tempo_want = None       # (rate, wall time of the last turn): the tempo knob settles before the level restarts
         self.tempo_job = None        # (rate, thread, song, result) stretching the stems in the background
         self.song_pcm = {}           # (song, rate) -> stems stretched by the tempo knob, until tracks_for takes them
@@ -574,6 +575,15 @@ class App:
         self.toasts.add(f"offset {self.offset_ms:.0f} ms", ACCENT, key="offset")
 
     def on_twister_press(self, name):
+        """A push, with the knob's toasts muted: the overlay is the feedback."""
+        self.tw_seen = (time.perf_counter(), name)
+        self.toasts.muted = True
+        try:
+            self.reset_knob(name)
+        finally:
+            self.toasts.muted = False
+
+    def reset_knob(self, name):
         """A pushed encoder: its knob back to the neutral value. The mix: backing full, drum stem
         silent (you are the drummer), metronome and everything at their default; the song's own
         tempo; the offset the recent runs fit best (the results box's "last N runs"), worked out
@@ -613,11 +623,14 @@ class App:
 
     def apply_turn(self, name, v):
         """A turn from the knob itself: applied without sending its ring back (Twister.ring)."""
+        self.tw_seen = (time.perf_counter(), name)
         self.twister.turning = True
+        self.toasts.muted = True            # the overlay shows the value: toasts are for discrete keys
         try:
             self.on_twister(name, v)
         finally:
             self.twister.turning = False
+            self.toasts.muted = False
 
     def poll_twister(self):
         now = time.perf_counter()
@@ -644,6 +657,7 @@ class App:
             elif kind == "bank":
                 self.on_twister_bank(v)
             elif kind == "offset_fit":
+                self.tw_seen = (time.perf_counter(), "offset")
                 ms = v if v is not None else self.OFFSET_FALLBACK
                 self.set_offset(max(0, min(self.OFFSET_KNOB_MAX, ms)))
                 self.toasts.add(f"offset {ms:.0f} ms" + (" (best over the recent runs)" if v is not None else " (no runs to fit)"),
@@ -670,7 +684,7 @@ class App:
                 th = threading.Thread(target=stretch, daemon=True)
                 th.start()
                 self.tempo_job = (rate, th, song, box)
-                self.toasts.add(f"stretching to {rate:.0%}...", DIM, key="twister_tempo")
+                self.tw_seen = (now, "tempo")
         if self.tempo_job and not self.tempo_job[1].is_alive():
             rate, _, song, box = self.tempo_job
             self.tempo_job = None
@@ -681,6 +695,7 @@ class App:
                 self.song_pcm[(song, round(rate, 3))] = box["pcm"]
                 self.rate = rate
                 scr.retry()
+            self.tw_seen = (time.perf_counter(), "tempo")     # the applied tempo stays up a moment
 
     def on_twister_bank(self, bank):
         """The Twister changed bank: on bank 2 the Launchpad is ours (GroupCtl lets go of it at the
@@ -1007,6 +1022,95 @@ class App:
             box.blit(ts, (30 * S, 7 * S))
             self.surface.blit(box, (x, y))
             y += h + 8 * S
+
+    TW_SHOW_S = 3.0
+    TW_RGB = {"backing": (230, 80, 220), "drums": (90, 220, 110), "metronome": (240, 220, 70),
+              "tempo": (70, 220, 240), "offset": (80, 130, 255), "menu": (255, 130, 190), "master": (240, 70, 70)}
+    TW_LABEL = {"backing": "backing", "drums": "drum stem", "metronome": "metronome", "tempo": "tempo",
+                "offset": "offset", "menu": "menu music", "master": "everything"}
+
+    def knob_value(self, name):
+        """(ring 0..1, value text, note or None) of a bank-2 knob, as the overlay shows it."""
+        if name in self.SONG_GAINS:
+            v = self.song_gain(name)
+            return v, f"{v:.0%}", None
+        if name == "metronome":
+            return self.metro_volume / METRO_VOLUME_MAX, f"{self.metro_volume:.0%}", None
+        if name == "offset":
+            return self.offset_ms / self.OFFSET_KNOB_MAX, f"{self.offset_ms:.0f} ms", None
+        if name == "menu":
+            return self.menu_volume, f"{self.menu_volume:.0%}", None
+        if name == "master":
+            return SND.master(), f"{SND.master():.0%}", None
+        if name == "tempo":
+            scr = self.play_screen_song()
+            if not scr:
+                return 0.0, "-", "songs only"
+            lo = SG.min_rate(scr.chart.bpm / scr.chart.rate)
+            rate, note = self.rate, None
+            if self.tempo_job:
+                rate, note = self.tempo_job[0], "stretching..."
+            elif self.tempo_want:
+                rate, note = self.tempo_want[0], "release to apply"
+            ring = (rate - lo) / (1 - lo) if lo < 1 else 1.0
+            return ring, f"{scr.chart.bpm / scr.chart.rate * rate:.0f} bpm", note or f"{rate:.0%}"
+        return 0.0, "", None
+
+    def draw_twister(self):
+        """The Twister's bank 2 as a 4 x 4 map, while a knob is touched and 3 s after (longer while a
+        tempo change is pending): every knob's name, ring and value, the one in hand framed."""
+        if self.tw_seen is None:
+            return
+        now = time.perf_counter()
+        busy = self.tempo_want is not None or self.tempo_job is not None
+        age = 0.0 if busy else now - self.tw_seen[0]
+        if busy:
+            self.tw_seen = (now, self.tw_seen[1])
+        if age > self.TW_SHOW_S + 0.5:
+            self.tw_seen = None
+            return
+        k = 1.0 if age < self.TW_SHOW_S else 1.0 - (age - self.TW_SHOW_S) / 0.5
+        S, f = self.scale, self.fonts
+        cw, ch, pad = 132 * S, 108 * S, 14 * S
+        w, h = 4 * cw + 2 * pad, 4 * ch + 2 * pad + 26 * S
+        panel = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (*LANE_BG, 235), panel.get_rect(), border_radius=int(14 * S))
+        pygame.draw.rect(panel, (*DIM, 255), panel.get_rect(), max(1, int(2 * S)), border_radius=int(14 * S))
+        t = f.text("TWISTER · BANK 2", f.tiny, DIM)
+        panel.blit(t, ((w - t.get_width()) / 2, pad * 0.6))
+        active = self.tw_seen[1]
+        r = 20 * S
+        th = max(2, int(5 * S))
+        for n in range(1, 17):
+            row, col = 3 - (n - 1) // 4, (n - 1) % 4          # 1 bottom left, 16 top right
+            x, y = pad + col * cw, pad + 26 * S + row * ch
+            cx, cy = x + cw / 2, y + 8 * S + r
+            name = TW_KNOBS.get(n)
+            rect = pygame.Rect(int(cx - r), int(cy - r), int(2 * r), int(2 * r))
+            track = (60, 60, 70)
+            pygame.draw.arc(panel, track, rect, -math.pi / 4, 5 * math.pi / 4, th)
+            if name is None:
+                continue
+            color = self.TW_RGB[name]
+            v, val, note = self.knob_value(name)
+            if name == active:
+                pygame.draw.rect(panel, color, pygame.Rect(int(x + 4 * S), int(y + 2 * S), int(cw - 8 * S), int(ch - 4 * S)),
+                                 max(1, int(2 * S)), border_radius=int(9 * S))
+            v = max(0.0, min(1.0, v))
+            if v > 0.005:
+                a1 = 5 * math.pi / 4
+                pygame.draw.arc(panel, color, rect, a1 - v * 3 * math.pi / 2, a1, th)
+            vs = f.text(val, f.small, TEXT)
+            yy = cy + r + 2 * S
+            panel.blit(vs, (cx - vs.get_width() / 2, yy))
+            yy += vs.get_height()
+            ls = f.text(self.TW_LABEL[name], f.tiny, color)
+            panel.blit(ls, (cx - ls.get_width() / 2, yy))
+            if note:
+                ns = f.text(note, f.tiny, DIM)
+                panel.blit(ns, (cx - ns.get_width() / 2, yy + ls.get_height()))
+        panel.set_alpha(int(255 * k))
+        self.surface.blit(panel, ((self.size[0] - w) / 2, (self.size[1] - h) / 2))
 
     def device_line(self):
         """One line for the hub: the three devices with their state."""
@@ -1491,6 +1595,7 @@ class App:
             self.recorder.push(self.surface)              # a copy 30 times a second while recording
             self.draw_recording_status()
             self.draw_toasts()
+            self.draw_twister()
             self.draw_debug()
             self.draw_chat()                              # the ! layer, after the recorder's push: never in the take
             self.draw_cam_monitor()

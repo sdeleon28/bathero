@@ -83,6 +83,8 @@ class Twister:
             print(f"twister: channel {msg.channel + 1} CC {msg.control} value {msg.value} -> "
                   f"{name or 'not ours'} (knob {POSITION.get(msg.control, '-')})", flush=True)
         if name is None:
+            if msg.control in POSITION and (msg.channel == ENCODER_CH or (msg.channel == BUTTON_CH and msg.value > 0)):
+                self.on_press(None)        # a dark knob of bank 2: the game shows the map of the bank
             return
         if msg.channel == ENCODER_CH:
             self.on_turn(name, msg.value / 127)

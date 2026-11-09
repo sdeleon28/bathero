@@ -109,10 +109,13 @@ class Toasts:
 
     def __init__(self):
         self.items = []          # (t0, text, color, key)
+        self.muted = False       # True while a Twister knob is applied: its overlay is the feedback
 
     def add(self, text, color, key=None):
         """key: a toast with a key replaces the live one with the same key (a value that
         changes on every key press, like the volume, shows one toast, not a stack)."""
+        if self.muted:
+            return
         if key is not None:
             self.items = [it for it in self.items if it[3] != key]
         self.items.append((time.perf_counter(), text, color, key))
