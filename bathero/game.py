@@ -359,6 +359,7 @@ class Game:
             t = self.song_time()
             if self.loop is not None and t >= self.loop[1]:
                 self._seek(self.loop[0])        # straight back, no run-up: the loop keeps the pulse
+                self._reset_score()             # each lap scores on its own (asked 2026-11-09)
                 t = self.song_time()
             # a note is missed once a hit could no longer reach it: the hits are dated
             # song_time - offset (hit_lane), so the deadline moves by the offset too. Until
@@ -388,6 +389,15 @@ class Game:
                         self.sounds.play(n.key, n.velocity, 0.45, art=n.art)
                     n.sounded = True
                     self.guide_cursor += 1
+
+    def _reset_score(self):
+        """Zero the counters the HUD shows, so the lap in progress is judged alone."""
+        self.hits = []
+        self.combo = self.max_combo = self.score = 0
+        self.counts = {k: 0 for k in self.counts}
+        self.dyn_counts = {k: 0 for k in self.dyn_counts}
+        self.dyn_seen = {k: 0 for k in self.dyn_seen}
+        self.art_counts = {k: 0 for k in self.art_counts}
 
     # --- stats ---------------------------------------------------------------
     def stats(self):
