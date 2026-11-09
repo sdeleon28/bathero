@@ -462,6 +462,9 @@ miss). The editor keeps them. Come Out and Play's intro (bars 1..8, from the use
 hhmapper, second take) is rack tom rim on every eighth, snare rim on 2 and 4, kick 1 &2 4, and a bark (open
 edge) on the &3 closed by the chick on 4 with the snare (which of the take's snares is the 2 was a guess
 against ADTOF's kicks); bars 4 and 8 keep ADTOF's notes as rims; the ADTOF version is `song.before-rims.json`.
+**Barks** (2026-11-08): the articulation "bark" (`art_matches`) accepts the pedal open or mid, either
+zone: the user's barks are mid and sound right, and "open edge" failed them. Come Out and Play's six barks
+use it.
 **Flams** (asked for 2026-11-08): **F** in the editor toggles `ChartNote.flam` on the selection (stored as
 "+flam" in the articulation field: "rim+flam", "flam"; `songs.note_from` / `note_row`). Drawn as a small
 grace box just below the note. Judged: the first stroke takes the note as usual, a second stroke on the

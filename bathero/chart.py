@@ -66,7 +66,7 @@ COLORS = {
 # openness from the pedal (CC4) x zone, plus the foot.
 HH_ARTS = ["tight body", "tight edge", "mid body", "mid edge", "open body", "open edge", "pedal chick"]
 HH_GLYPH = {"tight body": "+", "tight edge": ">+", "mid body": "/", "mid edge": ">/", "open body": "o", "open edge": ">o",
-            "pedal chick": "^", "rim": "r"}
+            "pedal chick": "^", "rim": "r", "bark": ">o"}
 
 
 def art_matches(want: str, played: str) -> bool:
@@ -76,6 +76,8 @@ def art_matches(want: str, played: str) -> bool:
     2026-09-17: the ladder writes edge on the beats and bow on the &s, and either is fine)."""
     if not want or not played:
         return False
+    if want == "bark":                  # a bark: the hat open enough to bark, open or mid, either zone
+        return played.split()[0] in ("open", "mid")
     return want == played or (want.split()[0] == played.split()[0] and "pedal" not in want)
 
 
