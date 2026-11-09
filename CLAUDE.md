@@ -444,6 +444,11 @@ under 0.05; left as the model says). `Chart.sections` [(first bar, label)]; on t
 pads take the user's colours (`LP.SECTION_COLORS`: intro cyan 41, verse green 21, pre-chorus pink
 57, chorus red 5, bridge and outro blue 45, break purple 49, solo yellow 13, inst magenta 53) and
 never merge across a section. The number keys and the highway markers are still the phrases.
+**On screen** (2026-11-09): the ruler under the lanes is the sections (`Renderer.section_bar`,
+`Chart.section_spans`: one cell per section, as wide as it lasts, its label on its colour, `SECTION_RGB` =
+the Launchpad's as RGB), and the play screen takes the section's colour as a mood (`mood_colour`, eased
+over 1.5 s; `MOOD_BG` / `MOOD_LANE` lean the floor and the lanes, `mood_glow` three wide glows drifting on
+20..40 s paths, added at `MOOD_GLOW`/255, redrawn 10 times a second at 1/16 size: ~1.5 ms a frame at 1080p).
 
 **A song counts itself in** (asked for 2026-11-08): two bars before chart time 0, on the song's
 own beat grid (`game.lead_in_for_chart`: `-beat_time(-8)`, the first beat interval extrapolated),
