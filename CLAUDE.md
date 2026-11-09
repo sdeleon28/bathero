@@ -343,7 +343,7 @@ piano plugged in the game sat on "Roland Digital Piano" ("roland") while the TD-
 nobody. Pianos, the Twister, the Launchpad and hhmapper's port are never taken. A song chart
 has `Chart.song` (its folder) and `song_offset`; `App.tracks_for` plays its two stems as the
 tracks "backing" and "drums" from `-song_offset / rate`. A rate other than 1 is ffmpeg `atempo`
-(pitch kept, chained under 0.5), **decoded straight into memory, nothing on disk** (`songs.stems`, both
+(pitch kept, chained under 0.5) and its head padded by `ATEMPO_LEAD_S` (15 ms) / rate, because atempo's output runs that much source time ahead (measured 2026-11-09: a slowed song judged 20..40 ms early), **decoded straight into memory, nothing on disk** (`songs.stems`, both
 stems at once, 0.4..1.2 s): until 2026-11-08 every rate tried was kept as raw s16 in the song's `cache/`
 (823 MB for one song), the disk filled up during a stretch from the tempo knob, the stretch's error was
 not caught and the game crashed, then crashed at every launch because it could not save its settings.

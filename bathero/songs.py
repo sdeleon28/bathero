@@ -114,6 +114,9 @@ def _atempo(rate):
     return ",".join(f"atempo={r:.5f}" for r in parts)
 
 
+ATEMPO_LEAD_S = 0.015
+
+
 def audio(song_dir, stem, rate=1.0):
     """The stem as int16 stereo at SR, stretched to `rate`, decoded into memory (0.5..1.2 s for a
     3-minute stem). Raises RuntimeError with ffmpeg's message when it fails."""
@@ -126,7 +129,14 @@ def audio(song_dir, stem, rate=1.0):
     if r.returncode != 0:
         msg = r.stderr.decode(errors="replace").strip().splitlines()
         raise RuntimeError(f"{stem}: {msg[-1] if msg else f'ffmpeg exited {r.returncode}'}")
-    return np.frombuffer(r.stdout, dtype=np.int16).reshape(-1, 2)
+    pcm = np.frombuffer(r.stdout, dtype=np.int16).reshape(-1, 2)
+    if rate != 1.0:
+        # atempo's output runs ATEMPO_LEAD_S of source time ahead (measured 2026-11-09 by onset
+        # correlation against the unstretched stem: 14..17 ms x rate at 0.4..0.9); you play with the
+        # music, so a slowed song came out 20..40 ms "early" at the judge. Pad the head to re-align.
+        pad = int(round(ATEMPO_LEAD_S / rate * SR))
+        pcm = np.concatenate([np.zeros((pad, 2), np.int16), pcm])
+    return pcm
 
 
 def stems(song_dir, rate=1.0):
