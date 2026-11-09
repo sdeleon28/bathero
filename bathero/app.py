@@ -872,9 +872,17 @@ class App:
     def on_midi(self, msg):
         t_cb = time.perf_counter()
         if msg.type == "control_change":
-            self.ghosts.control_change(msg.control, msg.value)
+            auto = self.ghosts.control_change(msg.control, msg.value)
             if msg.control == 4:
                 self.runlog.add("cc", control=msg.control, value=msg.value)
+            if auto and isinstance(self.screen_obj, PlayScreen):
+                # the pedal closed an open hat: that is the chick, whether the module sent 44 or not
+                vel = GH.AUTO_CHICK_VELOCITY
+                self.runlog.add("note", note=44, velocity=vel, cc=msg.value, auto=True)
+                result = self.screen_obj.on_note(44, vel)
+                if self.midi_trace is not None:
+                    self.midi_trace.write(f"{time.time():.6f} 44 {vel} {result or '-'} auto\n")
+                    self.midi_trace.flush()
         elif msg.type == "note_on" and msg.velocity > 0:
             scr = self.screen_obj
             if scr is None:

@@ -799,8 +799,11 @@ Resting sticks on a pad: 4..14.
   stroke behind it was counted a stray, so dropping it gives the note back. The fastest snare
   figure any chart writes is 89 ms apart.)
 - chick with velocity <= 20: drop (hhmapper)
-- hhmapper only, sound not judging: CC4 reaching 90 after an open stroke sends an optimistic chick (velocity
-  40) at once; the module's 44 within 60 ms is swallowed unless louder (2026-11-08, a slow close left the hat ringing)
+- CC4 reaching 90 after a hat stroke less than tight is an optimistic chick (velocity 40) at once; the
+  module's 44 within 60 ms is swallowed unless louder (hhmapper 2026-11-08, a slow close left the hat
+  ringing; bathero judges it too since 2026-11-09: closing a bark with the foot sent no 44 at all in
+  most barks, or one at 16..23, and the chart's chick was a MISS while the sound was right;
+  `GhostFilter.control_change` returns True and `App.on_midi` plays it as a 44 on the play screen)
 - any note with velocity < 8: drop (bathero)
 
 A change to a threshold goes to both repos and to this section. Validated 2026-09-09 by

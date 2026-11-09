@@ -92,6 +92,13 @@ SNARE_NOTES = {38, 40}          # head and rim, each zone its own reference
 SNARE_BOUNCE = [(70, 0.6)]
 
 PEDAL_CLOSED_CC = 90         # fully closed on this pedal (0 = fully open)
+# Optimistic chick (hhmapper 2026-11-08, bathero 2026-11-09): the module sends 44 only for a firm stomp,
+# so a bark closed by a slower foot reached CC4 90 with no 44 at all (or a 16..23 one) and the chart's
+# chick was a MISS while One Kit Wonder, fed by hhmapper's own optimistic chick, sounded it. When CC4
+# reaches PEDAL_CLOSED_CC after a stroke on a hat less than tight, the chick is that moment; the
+# module's own 44 within AUTO_CHICK_SWALLOW_MS after it is dropped unless louder.
+AUTO_CHICK_VELOCITY = 40
+AUTO_CHICK_SWALLOW_MS = 60
 TIGHT_MIN = 80               # closedness >= this -> tight
 OPEN_MAX = 10                # closedness <= this -> open; between -> mid
 EDGE_NOTES = {22, 26}
@@ -113,6 +120,8 @@ class GhostFilter:
     def __init__(self):
         self.cc_trail = deque()          # (t, value) samples within PEDAL_MOTION_MS
         self.last_chick_t = None
+        self.auto_chick_t = None         # when the CC's optimistic chick went out
+        self.open_since_chick = False    # a hat stroke less than tight since the last chick
         self.filtered = 0
         self.last_reason = None
         self.pedal_cc = PEDAL_CLOSED_CC  # assume closed until the pedal speaks
@@ -122,11 +131,18 @@ class GhostFilter:
         self.last_snare = {}             # note -> (t, velocity) of the last real stroke on that zone
 
     def control_change(self, control, value, t=None):
+        """True when this CC closes an open hat: the caller plays an optimistic chick (44)."""
         if control != PEDAL_CC:
-            return
+            return False
         t = time.perf_counter() if t is None else t
+        fire = (self.pedal_cc < PEDAL_CLOSED_CC <= value and self.open_since_chick
+                and (self.last_chick_t is None or (t - self.last_chick_t) * 1000 > AUTO_CHICK_SWALLOW_MS))
         self.pedal_cc = value
         self.cc_trail.append((t, value))
+        if fire:
+            self.auto_chick_t = self.last_chick_t = t
+            self.open_since_chick = False
+        return fire
 
     def pedal_motion(self, t):
         cutoff = t - PEDAL_MOTION_MS / 1000
@@ -141,7 +157,12 @@ class GhostFilter:
         """Why this note-on should be ignored, or None if it looks like a real stroke."""
         t = time.perf_counter() if t is None else t
         if note in CHICK_NOTES:
+            auto = self.auto_chick_t
+            if (auto is not None and (t - auto) * 1000 <= AUTO_CHICK_SWALLOW_MS
+                    and velocity <= AUTO_CHICK_VELOCITY):
+                return self._flag("chick after the optimistic one", t, note, velocity)
             self.last_chick_t = t
+            self.open_since_chick = False
             return None
         if velocity < ANY_MIN_VELOCITY:
             return self._flag("too soft", t, note, velocity)
@@ -192,6 +213,8 @@ class GhostFilter:
                         return self._flag("zone crosstalk", t, note, velocity)
                     break
         self.last_stroke = (t, note, velocity, zone, openness_label(self.pedal_cc))
+        if self.pedal_cc < TIGHT_MIN:
+            self.open_since_chick = True
         return None
 
     def articulation_for(self, note):
