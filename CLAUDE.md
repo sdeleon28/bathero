@@ -473,8 +473,9 @@ against ADTOF's kicks); bars 4 and 8 keep ADTOF's notes as rims; the ADTOF versi
 grace box just below the note. Judged: the first stroke takes the note as usual, a second stroke on the
 same lane within `FLAM_S` (90 ms) completes it (`flam_ok`, "FLAM", logged as a "flam" event) instead of a stray.
 
-**Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **E** on the play screen of an
-imported song (paused, or it pauses; from the intro card too) opens the editor over the highway;
+**Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **a paused song is the editor**
+(since 2026-11-09: space or the Launchpad's STOP pauses into it, no E, no card; resuming runs up a bar to the view
+only when it moved or the song was edited, other keys work as on a pause);
 the game stays paused and the view is the paused playhead (`Game.seek(t, 0)`), so the wheel, the
 number keys and the Launchpad's pads (`bar_jump` goes to `SongEditor.view_bar` while editing, no
 run-up; the view's bar blinks) move it. Notes show above and below the line on the grid. Click
@@ -487,6 +488,13 @@ at once (times divided back to rate 1; the first keeps `song.transcribed.json`),
 per 10 ms, and re-reads the songs course so a retry plays the edit. E / Esc done (the playhead
 parks a bar before the view), space or the Launchpad's STOP done and play. A run that was edited
 is a rehearsal (it seeked).
+
+**Recording over the loop** (asked for 2026-11-09, for sections ADTOF gets wrong): the time selection is the
+Launchpad's loop (MIXER then two pads). Paused, the side **RECORD ARM** arms (red; needs a loop), **space**
+records: a bar of run-up, the guide off, the loop not wrapping, the song and metronome on; every pad heard
+until the loop's end (chart time minus the offset) replaces the loop's notes, **quantised strictly to the
+grid** (G; off counts as 1/16), one note per drum per slot (the loudest), with the hi-hat's articulation,
+rim on snare / toms, the chick as the "pedal" key. Esc cancels, space or STOP ends early (keeps), cmd Z undoes.
 
 ## The double-kick levels' backing (`Chart.backing == "kick"`)
 

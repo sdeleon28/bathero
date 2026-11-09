@@ -3422,22 +3422,75 @@ class PlayScreen(Screen):
             g.toggle_pause()
         self.loop_digits = None
         self.editor = SE.SongEditor(self)
-        self.editor.view(g.song_time())
         self.renderer.edit = self.editor
         self.app.runlog.add("edit", on=True)
-        self.app.toasts.add("editing the song · E when done", ACCENT, key="edit")
+
+    def toggle_pause(self):
+        """Space / the Launchpad's STOP: on a song, paused is editing (2026-11-09: no E, no card)."""
+        g = self.game
+        if g.finished:
+            return
+        if self.editor is not None:
+            self.stop_editing(play=True)
+        elif self.chart.song and not g.paused:
+            self.start_editing()
+        else:
+            g.toggle_pause()
+        self.app.runlog.add("pause", paused=g.paused)
 
     def stop_editing(self, play=False):
-        """Done: the playhead parks a bar before the view (the jumps' run-up), paused unless play."""
+        """Done: when the view moved or the song changed, the playhead parks a bar before the view
+        (the jumps' run-up); a plain pause resumes where it stopped. Paused unless play."""
         ed, g, ch = self.editor, self.game, self.chart
+        if ed.recording:
+            self.end_recording(keep=False)
         self.editor = self.renderer.edit = None
-        t = max(0.0, g.song_time())
-        g.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
+        if ed.moved or ed.saved:
+            t = max(0.0, g.song_time())
+            g.seek(t, t - ch.beat_time(ch.beat_pos(t) - 4))
         self.app.runlog.add("edit", on=False, saves=ed.saved)
         if ed.saved:
             self.app.toasts.add(f"song saved · {len(g.notes)} notes" + (" · playing" if play else " · space plays"), ACCENT, key="edit")
         if play:
             g.toggle_pause()
+
+    def start_recording(self):
+        """Space with RECORD ARM on: a bar of run-up, then everything played until the loop's end
+        replaces the loop's notes, quantised to the grid (songedit.apply_take). The guide is off and
+        the loop does not wrap meanwhile."""
+        span = self.loop_span()
+        ed, g, ch = self.editor, self.game, self.chart
+        if span is None:
+            ed.armed = False
+            self.app.toasts.add("record arm: mark a loop first (MIXER, then two pads)", DIM, key="edit")
+            return
+        ed.span = (max(0.0, span[0]), span[1])
+        t0 = ed.span[0]
+        ed.take.clear()
+        ed.sel = {}
+        self.rec_guide = g.guide
+        g.guide = False
+        g.set_loop(None)
+        g.seek(t0, t0 - ch.beat_time(ch.beat_pos(t0) - 4))
+        if g.paused:
+            g.toggle_pause()
+        ed.recording = True
+        self.app.runlog.add("record", span=list(ed.span))
+
+    def end_recording(self, keep=True):
+        ed, g = self.editor, self.game
+        ed.recording = False
+        if not g.paused:
+            g.toggle_pause()
+        g.guide = getattr(self, "rec_guide", g.guide)
+        if keep:
+            ed.apply_take()
+        else:
+            ed.take.clear()
+            self.app.toasts.add("recording cancelled", DIM, key="edit")
+        ed.armed = False
+        self.apply_loop()
+        ed.view(ed.span[0])
 
     def on_mouse(self, ev):
         if self.editor is not None:
@@ -3485,11 +3538,21 @@ class PlayScreen(Screen):
     def on_note(self, note, velocity):        # MIDI thread: judge immediately while playing
         ed = self.editor
         if ed is not None:
-            # editing: every pad sounds, and is where the selection goes
+            # editing: every pad sounds, and is where the selection goes (or, recording, the take)
             inst = self.app.instrument_for(note)
             if inst is None or velocity < NAV_SOUND_MIN_VELOCITY:
                 return "edit"
             self.app.sounds.play(inst, velocity, 0.8)
+            if ed.recording:
+                art = self.app.ghosts.articulation_for(note)
+                if inst == "pedal":
+                    art = None                            # the pedal key is the chick already
+                elif art is None:
+                    zk = self.app.zone_for(note)
+                    art = "rim" if zk and C.ZONE[zk].part == "rim" else None
+                t = self.game.song_time() - self.game.offset_ms / 1000.0
+                ed.take.append((t, inst, velocity, art))
+                return 'record'
             if velocity >= NAV_MIN_VELOCITY:
                 ed.on_hit(inst, velocity)
             return "edit"
@@ -3531,18 +3594,24 @@ class PlayScreen(Screen):
         g = self.game
         ed = self.editor
         if ed is not None:
-            if ed.on_key(key):
-                pass
-            elif key == pygame.K_e:
-                self.stop_editing()
-            elif key == pygame.K_ESCAPE:
-                if ed.sel:
-                    ed.sel = {}
+            if ed.recording:
+                if key == pygame.K_ESCAPE:
+                    self.end_recording(keep=False)
+                elif key == pygame.K_SPACE:
+                    self.end_recording()
+                return True
+            if key == pygame.K_SPACE:
+                if ed.armed:
+                    self.start_recording()
                 else:
-                    self.stop_editing()
-            elif key == pygame.K_SPACE:
-                self.stop_editing(play=True)
-            elif key in KEY_LANES:
+                    self.toggle_pause()
+                return True
+            if ed.on_key(key):
+                return True
+            if key == pygame.K_ESCAPE and ed.sel:
+                ed.sel = {}
+                return True
+            if key in KEY_LANES:
                 bounds = self.phrases()
                 i = KEY_LANES[key]
                 if i < len(bounds) - 1:
@@ -3550,10 +3619,9 @@ class PlayScreen(Screen):
                     self.app.toasts.add(f"phrase {(i + 1) % 10}  ·  {self.chart.place(bounds[i])}", ACCENT, key="phrase")
                 else:
                     self.app.toasts.add(self.no_phrase(i, len(bounds) - 1), DIM, key="phrase")
-            return True
-        if key == pygame.K_e:
-            self.start_editing()
-        elif key == pygame.K_ESCAPE:
+                return True
+            # anything else (R, [ ], Esc, M, B...) works as on a plain pause
+        if key == pygame.K_ESCAPE:
             self.to_list()
         elif key == pygame.K_s:
             # the intro on or off, saved; off while it is up, the level starts right away
@@ -3563,9 +3631,7 @@ class PlayScreen(Screen):
         elif self.armed and key in (pygame.K_SPACE, pygame.K_RETURN):
             self.start(by="key")
         elif key == pygame.K_SPACE:
-            if not g.finished:
-                g.toggle_pause()
-                self.app.runlog.add("pause", paused=g.paused)
+            self.toggle_pause()
         elif key == pygame.K_r:
             self.retry()
         elif key == pygame.K_RETURN and g.finished:
@@ -3752,14 +3818,22 @@ class PlayScreen(Screen):
                     self.app.toasts.add("loop: the first pad, then the last", ACCENT, key="loop")
             return
         if kind == "side":
-            if name == "stop":
-                if self.editor is not None:
-                    self.stop_editing(play=True)
+            if name == "arm":
+                ed = self.editor
+                if ed is None or ed.recording:
+                    return
+                if not ed.armed and self.loop_span() is None:
+                    self.app.toasts.add("record arm: mark a loop first (MIXER, then two pads)", DIM, key="edit")
+                    return
+                ed.armed = not ed.armed
+                self.app.toasts.add("armed · space records over the loop" if ed.armed else "disarmed", ACCENT, key="edit")
+            elif name == "stop":
+                if self.editor is not None and self.editor.recording:
+                    self.end_recording()
                 elif self.armed:
                     self.start(by="launchpad")
-                elif not g.finished:
-                    g.toggle_pause()
-                    self.app.runlog.add("pause", paused=g.paused)
+                else:
+                    self.toggle_pause()
             elif name == "mute" and not g.finished:
                 self.toggle_loop()
             return
@@ -3802,7 +3876,11 @@ class PlayScreen(Screen):
         if span is not None:
             loop_bars = (int(round(ch.beat_pos(span[0]) / 4)), int(round(ch.beat_pos(span[1]) / 4)))
         ex.grid(colours, loop_bars, bar, ch.key, lead, groups)
-        return ex.frame(playing, self.app.loop_on and span is not None)
+        fr = ex.frame(playing, self.app.loop_on and span is not None)
+        ed = self.editor
+        if ed is not None and (ed.armed or ed.recording):
+            fr[("note", LP.SIDE_NOTE["arm"])] = (LP.ARM_COLOR, ed.recording)
+        return fr
 
     def to_list(self):
         self.leave()
@@ -3889,7 +3967,13 @@ class PlayScreen(Screen):
 
     def update(self):
         if self.editor is not None:
-            self.editor.update()
+            ed = self.editor
+            if ed.recording:
+                self.game.update()
+                if self.game.song_time() >= ed.span[1]:
+                    self.end_recording()
+                return
+            ed.update()
             return
         if self.armed:
             if self.start_at is not None:

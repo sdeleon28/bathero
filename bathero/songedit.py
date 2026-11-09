@@ -57,6 +57,11 @@ class SongEditor:
         self.keys = {l.key for l in screen.game.lanes}   # lanes stay while editing, even emptied
         self.last_click = (0.0, None)
         self.saved = 0
+        self.moved = False                 # the view left the paused playhead: resuming runs up to it
+        self.armed = False                 # the Launchpad's RECORD ARM: space records over the loop
+        self.recording = False
+        self.span = None                   # (t0, t1) being recorded: the loop's
+        self.take = deque()                # (chart t, key, velocity, art) heard while recording (MIDI thread)
 
     # --- geometry -------------------------------------------------------------------------
     @property
@@ -128,6 +133,7 @@ class SongEditor:
 
     # --- the view ---------------------------------------------------------------------------
     def view(self, t):
+        self.moved = True
         self.game.seek(max(0.0, t), 0.0)
 
     def scroll(self, dy_px):
@@ -270,6 +276,8 @@ class SongEditor:
                 self.retarget(inst)
 
     def on_mouse(self, ev):
+        if self.recording:
+            return
         shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             self.press_left(ev.pos, shift)
@@ -289,6 +297,40 @@ class SongEditor:
                 self.scroll(dy * 40 * self.r.s)
                 if self.drag is not None:
                     self.motion(pygame.mouse.get_pos())
+
+    # --- recording over the loop (RECORD ARM, space) -------------------------------------------
+    def quantize(self, t):
+        sub, ch = GRIDS[self.grid][0] or 4, self.chart
+        return ch.beat_time(round(ch.beat_pos(t) * sub) / sub)
+
+    def take_notes(self):
+        """The take quantised to the grid, inside the span, one note per drum per slot (the loudest)."""
+        t0, t1 = self.span
+        best = {}
+        for t, key, vel, art in list(self.take):
+            q = self.quantize(t)
+            if not (t0 - 1e-4 <= q < t1 - 1e-4):
+                continue
+            k = (key, round(q, 4))
+            if k not in best or vel > best[k][2]:
+                best[k] = (q, key, vel, art)
+        return [ChartNote(t=q, key=key, velocity=vel, art=art) for q, key, vel, art in best.values()]
+
+    def apply_take(self):
+        """Replace the span's notes with the take's."""
+        t0, t1 = self.span
+        new = self.take_notes()
+        self.take.clear()
+        self.remember()
+        old = [n for n in self.game.notes if t0 - 1e-4 <= n.t < t1 - 1e-4]
+        gone = {id(n) for n in old}
+        self.game.notes[:] = [n for n in self.game.notes if id(n) not in gone] + new
+        if not self.game.notes:
+            self.restore(self.undo.pop())
+            return
+        self.sel = {}
+        self.commit(f"recorded {len(new)} notes over {len(old)} · grid "
+                    f"{GRIDS[self.grid][1] if GRIDS[self.grid][0] else '1/16'} · ⌘Z undoes")
 
     def press_left(self, pos, shift):
         n = self.note_at(pos)
@@ -447,6 +489,15 @@ class SongEditor:
                 pygame.draw.rect(surf, colour, rect, border_radius=int(6 * S))
                 if accent:
                     pygame.draw.rect(surf, (255, 255, 255), rect, 2, border_radius=int(6 * S))
+        if self.recording:                                 # the take so far, quantised, as outlines
+            index = {l.key: i for i, l in enumerate(self.game.lanes)}
+            for n in self.take_notes():
+                if n.key in index:
+                    w = r.lane_w * 0.8
+                    x = r.lane_x[index[n.key]] + (r.lane_w - w) / 2
+                    y = r.y_for(n.t, now)
+                    pygame.draw.rect(surf, (255, 255, 255), (x, int(y - 8 * S), w, int(16 * S)), max(2, int(2 * S)),
+                                     border_radius=int(6 * S))
         if self.marquee is not None:
             x0, y0, x1, y1 = self.marquee
             rect = pygame.Rect(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
@@ -457,19 +508,13 @@ class SongEditor:
                 pygame.draw.rect(surf, (80, 200, 230), rect, 1)
 
     def draw_card(self, surf, now):
+        """Only the recording's state: a paused song is the editor, without a card (2026-11-09)."""
         r, f, S = self.r, self.r.f, self.r.s
-        lines = [f"EDITING  ·  {self.chart.place(now)}  ·  grid {GRIDS[self.grid][1]}  ·  "
-                 + (f"{len(self.sel)} selected" if self.sel else "nothing selected")
-                 + (f"  ·  zoom {self.zoom:.2g}x" if self.zoom != 1.0 else ""),
-                 "click select  ·  shift-click add  ·  drag move  ·  drag empty: marquee  ·  double-click add",
-                 "right-click or ⌫ delete  ·  hit a drum: the selection goes there  ·  ↑↓ nudge  ·  ←→ lane",
-                 "G grid  ·  ⌘Z undo  ·  wheel scroll, ⌘ wheel zoom  ·  1..0 phrases  ·  E done  ·  space play"]
-        y = 178 * S
-        back = pygame.Surface((int(min(r.w - 20 * S, 900 * S)), int(84 * S)))
-        back.fill((14, 14, 18))
-        back.set_alpha(225)
-        surf.blit(back, (r.w / 2 - back.get_width() / 2, y - 14 * S))
-        f.center(surf, lines[0], f.mid, (80, 200, 230), y)
-        f.center(surf, lines[1], f.small, (120, 120, 130), y + 24 * S)
-        f.center(surf, lines[2], f.small, (120, 120, 130), y + 42 * S)
-        f.center(surf, lines[3], f.small, (120, 120, 130), y + 60 * S)
+        if self.recording:
+            text, col = f"● RECORDING  ·  {self.chart.place(max(now, 0.0))}  ·  grid " \
+                        f"{GRIDS[self.grid][1] if GRIDS[self.grid][0] else '1/16'}  ·  Esc cancels", (230, 60, 60)
+        elif self.armed:
+            text, col = "ARMED  ·  space records over the loop", (230, 60, 60)
+        else:
+            return
+        f.center(surf, text, f.mid, col, 178 * S)
