@@ -24,6 +24,18 @@ SLOWER_BPM = 126          # the Twister's tempo knob goes from the song's tempo 
 MIN_RATE = 0.3            # ... but never under the game's slowest rate
 
 
+def note_from(x):
+    """A song.json row [t, key, velocity(, art)] as a ChartNote; art may carry "+flam" ("rim+flam", "flam")."""
+    parts = x[3].split("+") if len(x) > 3 and x[3] else []
+    art = "+".join(p for p in parts if p != "flam") or None
+    return ChartNote(t=x[0], key=x[1], velocity=x[2], art=art, flam="flam" in parts)
+
+
+def note_row(n, rate=1.0):
+    art = "+".join(p for p in (n.art, "flam" if n.flam else None) if p)
+    return [round(n.t * rate, 4), n.key, int(n.velocity)] + ([art] if art else [])
+
+
 def difficulty(notes):
     """0..10 from the chart in absolute time (the beat tracker halves some tempos, so nothing here
     counts in beats): half the mean and half the busiest 4 s in notes per second, the share of kicks
@@ -62,7 +74,7 @@ def load():
             s = json.load(open(p))
         except (OSError, ValueError):
             continue
-        notes = [ChartNote(t=x[0], key=x[1], velocity=x[2], art=x[3] if len(x) > 3 else None) for x in s["notes"]]
+        notes = [note_from(x) for x in s["notes"]]
         if not notes:
             continue
         sections = None
@@ -72,7 +84,7 @@ def load():
             pass
         diff = difficulty(notes)
         out.append((diff, Chart(name=f"♪ {s['title']}", notes=notes, bpm=s["bpm"], beats=s["beats"], backing="song",
-                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections, expression=any(n.art for n in notes),
+                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections, expression=any(n.art or n.flam for n in notes),
                                 desc=f"difficulty {diff:.1f} · imported {s.get('made', '')}"
                                      + (f" · edited {s['edited']}" if s.get("edited") else ""))))
     out.sort(key=lambda x: (x[0], x[1].name.lower()))

@@ -277,6 +277,10 @@ class Renderer:
             # hats and the bars where they open read as groups from across the room.
             color = OPENNESS_COLORS[n.art.split()[0]]
         rect = (x, int(y - nh / 2), w, nh)
+        if n.flam:                                      # the grace stroke: a small box just ahead (below)
+            gw, gh = int(w * 0.5), max(3, int(nh * 0.45))
+            pygame.draw.rect(surf, lerp(color, BG, 0.3), (int(x + (w - gw) / 2), int(y + nh / 2 + 2 * S), gw, gh),
+                             border_radius=int(3 * S))
         pygame.draw.rect(surf, color, rect, border_radius=int(6 * S))
         if accent:
             pygame.draw.rect(surf, (255, 255, 255), rect, 2, border_radius=int(6 * S))

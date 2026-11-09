@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from .chart import art_matches
 
+FLAM_S = 0.09            # a flam: its second stroke on the same drum lands within this of the first
 PERFECT_MS = 30          # |error| <= this -> PERFECT (25 until 2026-09-20: five stars asked for 9 in 10 notes
                          # within 25 ms, a 20 ms spread; the user's best gallop runs sat at 24 ms and 94 was
                          # reached by 1 run in 132; at 30 by 18, the ones with every note and no stray)
@@ -288,6 +289,14 @@ class Game:
                     best, best_err = n, err
             dyn = None
             if best is None:
+                fl = self._flam_partner(lane, t)
+                if fl is not None:                      # the second stroke of a flam: not a stray
+                    fl.flam_ok = True
+                    self.strokes.append((t, self.lanes[lane].key))
+                    if self.log is not None:
+                        self.log.add("flam", note=note, velocity=velocity, key=self.lanes[lane].key,
+                                     song_t=round(t, 4), chart_t=round(fl.t, 4))
+                    return "FLAM"
                 judge, err_ms = "STRAY", None
             else:
                 err_ms = best_err * 1000
@@ -313,6 +322,14 @@ class Game:
                              art=best.art if best else None, played=art, art_ok=best.art_ok if best else None,
                              combo=self.combo, score=self.score)
             return judge
+
+    def _flam_partner(self, lane, t):
+        """A flam note on this lane hit within FLAM_S before t whose second stroke has not come."""
+        for n in reversed(self.notes[max(0, self.cursor - 16):self.cursor + 16]):
+            if (n.flam and n.lane == lane and n.state == "hit" and not n.flam_ok
+                    and 0 <= t - (n.t + (n.error_ms or 0) / 1000) <= FLAM_S):
+                return n
+        return None
 
     def _register(self, judge, lane, err_ms, velocity, wall_t, note, dyn=None):
         self.counts[judge] += 1

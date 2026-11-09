@@ -149,6 +149,8 @@ class ChartNote:
     art: str = None         # required hi-hat articulation (HH_ARTS), judged when the chart has expression
     art_ok: bool = None     # set when hit: the stroke's articulation matched
     played: str = None      # the articulation actually played
+    flam: bool = False      # a flam: a grace stroke on the same drum just before (song editor F)
+    flam_ok: bool = None    # set when the second stroke of the flam arrives
 
 
 @dataclass

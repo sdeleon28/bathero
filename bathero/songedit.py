@@ -31,6 +31,7 @@ from collections import deque
 
 import pygame
 
+from . import songs as SG
 from .chart import ChartNote, build_lanes
 
 GRIDS = [(4, "1/16"), (2, "1/8"), (1, "1/4"), (8, "1/32"), (3, "1/8 triplets"), (6, "1/16 triplets"), (0, "off")]
@@ -138,7 +139,7 @@ class SongEditor:
 
     # --- changes ------------------------------------------------------------------------------
     def snapshot(self):
-        return [(n.t, n.key, n.velocity, n.art) for n in self.game.notes]
+        return [(n.t, n.key, n.velocity, n.art, n.flam) for n in self.game.notes]
 
     def remember(self):
         self.undo.append(self.snapshot())
@@ -146,7 +147,7 @@ class SongEditor:
         self.redo.clear()
 
     def restore(self, snap):
-        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a) for t, k, v, a in snap]
+        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a, flam=fl) for t, k, v, a, fl in snap]
         self.sel = {}
         self.commit()
 
@@ -196,7 +197,7 @@ class SongEditor:
             backup = os.path.join(ch.song, BACKUP)
             if not os.path.exists(backup):
                 shutil.copyfile(path, backup)
-            s["notes"] = [[round(n.t * ch.rate, 4), n.key, int(n.velocity)] + ([n.art] if n.art else []) for n in self.game.notes]
+            s["notes"] = [SG.note_row(n, ch.rate) for n in self.game.notes]
             s["edited"] = time.strftime("%Y-%m-%d %H:%M")
             with open(path + ".part", "w") as f:
                 json.dump(s, f)
@@ -383,6 +384,16 @@ class SongEditor:
             app.toasts.add(f"all {len(self.sel)} notes selected", (80, 200, 230), key="edit")
         elif key in (pygame.K_BACKSPACE, pygame.K_DELETE):
             self.delete(list(self.sel.values()))
+        elif key == pygame.K_f and not cmd:
+            if not self.sel:
+                app.toasts.add("select notes first, then F for a flam", (120, 120, 130), key="edit")
+                return True
+            self.remember()
+            on = not all(n.flam for n in self.sel.values())
+            for n in self.sel.values():
+                n.flam = on
+            self.commit()
+            app.toasts.add(f"flam {'on' if on else 'off'} · {len(self.sel)} notes", (80, 200, 230), key="edit")
         elif key == pygame.K_g:
             self.grid = (self.grid + 1) % len(GRIDS)
             app.toasts.add(f"grid {GRIDS[self.grid][1]}", (80, 200, 230), key="edit")
