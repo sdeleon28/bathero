@@ -785,6 +785,8 @@ Resting sticks on a pad: 4..14.
   stroke behind it was counted a stray, so dropping it gives the note back. The fastest snare
   figure any chart writes is 89 ms apart.)
 - chick with velocity <= 20: drop (hhmapper)
+- hhmapper only, sound not judging: CC4 reaching 90 after an open stroke sends an optimistic chick (velocity
+  40) at once; the module's 44 within 60 ms is swallowed unless louder (2026-11-08, a slow close left the hat ringing)
 - any note with velocity < 8: drop (bathero)
 
 A change to a threshold goes to both repos and to this section. Validated 2026-09-09 by
