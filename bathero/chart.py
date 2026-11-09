@@ -66,7 +66,7 @@ COLORS = {
 # openness from the pedal (CC4) x zone, plus the foot.
 HH_ARTS = ["tight body", "tight edge", "mid body", "mid edge", "open body", "open edge", "pedal chick"]
 HH_GLYPH = {"tight body": "+", "tight edge": ">+", "mid body": "/", "mid edge": ">/", "open body": "o", "open edge": ">o",
-            "pedal chick": "^"}
+            "pedal chick": "^", "rim": "r"}
 
 
 def art_matches(want: str, played: str) -> bool:

@@ -62,7 +62,7 @@ def load():
             s = json.load(open(p))
         except (OSError, ValueError):
             continue
-        notes = [ChartNote(t=t, key=k, velocity=v) for t, k, v in s["notes"]]
+        notes = [ChartNote(t=x[0], key=x[1], velocity=x[2], art=x[3] if len(x) > 3 else None) for x in s["notes"]]
         if not notes:
             continue
         sections = None
@@ -72,7 +72,7 @@ def load():
             pass
         diff = difficulty(notes)
         out.append((diff, Chart(name=f"♪ {s['title']}", notes=notes, bpm=s["bpm"], beats=s["beats"], backing="song",
-                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections,
+                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections, expression=any(n.art for n in notes),
                                 desc=f"difficulty {diff:.1f} · imported {s.get('made', '')}"
                                      + (f" · edited {s['edited']}" if s.get("edited") else ""))))
     out.sort(key=lambda x: (x[0], x[1].name.lower()))

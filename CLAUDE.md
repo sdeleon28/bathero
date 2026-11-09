@@ -454,6 +454,14 @@ first two pads, orange (`LP.COUNT_COLOR` 9, out of `PHRASE_COLORS` and of the se
 one pad each at any zoom; a pad there starts the count from that bar, a jump to bar 1 runs up
 through the count's 1 2 3 4, and the loop gesture never takes the count.
 
+**Articulations in a song** (asked for 2026-11-08 for Come Out and Play): a song.json note may carry a
+fourth field, the articulation: "rim" / "head" on snare and toms (the stroke's zone from the kit, set in
+`PlayScreen` when the ghost filter gives no hi-hat label), or a hi-hat label ("open edge", "pedal chick" on
+the "pedal" key). Any such note makes the chart `expression`, judged like the hi-hat lessons ("RIM" on a
+miss). The editor keeps them. Come Out and Play's intro (bars 1..8, from the user's played take through
+hhmapper) is rack tom rim eighths, snare rim on 2 and 4, kick 1 &2 &3, and on the &4 a bark (open edge)
+closed by the chick on the next 1; the ADTOF version is `song.before-rims.json`.
+
 **Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **E** on the play screen of an
 imported song (paused, or it pauses; from the intro card too) opens the editor over the highway;
 the game stays paused and the view is the paused playhead (`Game.seek(t, 0)`), so the wheel, the

@@ -407,7 +407,8 @@ class Renderer:
                 surf.blit(ds, (self.w / 2 - ds.get_width() / 2, self.h * 0.30 + 90 * S))
                 ds.set_alpha(255)
             elif latest.art and not latest.art[1]:
-                ds = f.text(f"HAT: {art_goal(latest.art[0]).upper()}", f.mid, DYN_COLORS["SOFT"])
+                want = latest.art[0]
+                ds = f.text("RIM" if want == "rim" else "HEAD" if want == "head" else f"HAT: {art_goal(want).upper()}", f.mid, DYN_COLORS["SOFT"])
                 ds.set_alpha(int(255 * (1 - jt)))
                 surf.blit(ds, (self.w / 2 - ds.get_width() / 2, self.h * 0.30 + 90 * S))
                 ds.set_alpha(255)

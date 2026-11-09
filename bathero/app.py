@@ -3402,7 +3402,12 @@ class PlayScreen(Screen):
         if self.nav_ready():
             self.app.nav_hit(note, velocity)
             return "nav"
-        j = self.game.hit(note, velocity, art=self.app.ghosts.articulation_for(note))
+        art = self.app.ghosts.articulation_for(note)
+        if art is None:                                  # snare / toms: which zone (a song can ask for the rim)
+            zk = self.app.zone_for(note)
+            part = C.ZONE[zk].part if zk else None
+            art = part if part in ("rim", "head") else None
+        j = self.game.hit(note, velocity, art=art)
         return f"{j}" if j else "unmapped"
 
     def on_drum(self, inst):

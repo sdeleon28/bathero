@@ -138,7 +138,7 @@ class SongEditor:
 
     # --- changes ------------------------------------------------------------------------------
     def snapshot(self):
-        return [(n.t, n.key, n.velocity) for n in self.game.notes]
+        return [(n.t, n.key, n.velocity, n.art) for n in self.game.notes]
 
     def remember(self):
         self.undo.append(self.snapshot())
@@ -146,7 +146,7 @@ class SongEditor:
         self.redo.clear()
 
     def restore(self, snap):
-        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v) for t, k, v in snap]
+        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a) for t, k, v, a in snap]
         self.sel = {}
         self.commit()
 
@@ -196,7 +196,7 @@ class SongEditor:
             backup = os.path.join(ch.song, BACKUP)
             if not os.path.exists(backup):
                 shutil.copyfile(path, backup)
-            s["notes"] = [[round(n.t * ch.rate, 4), n.key, int(n.velocity)] for n in self.game.notes]
+            s["notes"] = [[round(n.t * ch.rate, 4), n.key, int(n.velocity)] + ([n.art] if n.art else []) for n in self.game.notes]
             s["edited"] = time.strftime("%Y-%m-%d %H:%M")
             with open(path + ".part", "w") as f:
                 json.dump(s, f)
