@@ -459,8 +459,9 @@ fourth field, the articulation: "rim" / "head" on snare and toms (the stroke's z
 `PlayScreen` when the ghost filter gives no hi-hat label), or a hi-hat label ("open edge", "pedal chick" on
 the "pedal" key). Any such note makes the chart `expression`, judged like the hi-hat lessons ("RIM" on a
 miss). The editor keeps them. Come Out and Play's intro (bars 1..8, from the user's played take through
-hhmapper) is rack tom rim eighths, snare rim on 2 and 4, kick 1 &2 &3, and on the &4 a bark (open edge)
-closed by the chick on the next 1; the ADTOF version is `song.before-rims.json`.
+hhmapper, second take) is rack tom rim on every eighth, snare rim on 2 and 4, kick 1 &2 4, and a bark (open
+edge) on the &3 closed by the chick on 4 with the snare (which of the take's snares is the 2 was a guess
+against ADTOF's kicks); bars 4 and 8 keep ADTOF's notes as rims; the ADTOF version is `song.before-rims.json`.
 
 **Editing a song** (`bathero/songedit.py`, asked for 2026-11-08): **E** on the play screen of an
 imported song (paused, or it pauses; from the intro card too) opens the editor over the highway;
