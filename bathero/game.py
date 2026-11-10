@@ -259,7 +259,7 @@ class Game:
                 track.stop()
 
     # --- input -------------------------------------------------------------
-    def hit(self, note: int, velocity: int = 100, wall_t: float = None, art: str = None):
+    def hit(self, note: int, velocity: int = 100, wall_t: float = None, art: str = None, cc: int = None):
         """Judge an incoming MIDI note. Called from the MIDI thread; must be quick.
         art: the hi-hat articulation played (hhmapper's labels), known from the pedal and the zone."""
         lane = self.by_note.get(note)
@@ -308,6 +308,7 @@ class Game:
                     dyn = best.dyn = dynamic_for(best.accent, velocity, best.key, self.night, self.dyn_scale(best.key))
                 if self.chart.expression and best.art:
                     best.played = art
+                    self._played_cc = cc                          # the pedal's CC4 at the stroke, for the feedback
                     best.art_ok = art_matches(best.art, art, best.strict)      # the pedal position, not the zone
                     self.art_counts["ok" if best.art_ok else "wrong"] += 1
                     if best.art_ok:
@@ -347,7 +348,7 @@ class Game:
                 self.score += DYN_BONUS
         self.flashes.append(Flash(wall_t, lane, judge, err_ms, velocity, dyn,
                                   None if note is None or note.art is None or note.art_ok is None
-                                  else (note.art, note.art_ok, note.played)))
+                                  else (note.art, note.art_ok, note.played, getattr(self, "_played_cc", None))))
         self.hits.append((note.t if note else None, lane, judge, err_ms, velocity, dyn))
 
     # --- per-frame housekeeping ----------------------------------------------

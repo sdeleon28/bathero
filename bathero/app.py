@@ -3608,7 +3608,8 @@ class PlayScreen(Screen):
             zk = self.app.zone_for(note)
             part = C.ZONE[zk].part if zk else None
             art = part if part in ("rim", "head") else None
-        j = self.game.hit(note, velocity, art=art)
+        cc = self.app.ghosts.pedal_cc if art and art.split()[0] in ("tight", "mid", "open") else None
+        j = self.game.hit(note, velocity, art=art, cc=cc)
         return f"{j}" if j else "unmapped"
 
     def on_drum(self, inst):

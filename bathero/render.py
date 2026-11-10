@@ -163,6 +163,17 @@ class Fonts:
         return ts.get_height()
 
 
+def art_heard(played, cc=None, want=None):
+    """What the stroke was read as, for a wrong articulation: 'tight (pedal 84)', 'rim', 'nothing'."""
+    if not played:
+        return "no articulation"
+    if played.split()[0] in ("tight", "mid", "open"):
+        o, z = played.split()[0], played.split()[1] if len(played.split()) > 1 else ""
+        same = bool(want) and want.split()[0] == o           # right openness, so the zone (strict) was wrong
+        return f"{o}{' ' + z if same else ''}" + (f" (pedal {cc})" if cc is not None else "")
+    return "chick" if "pedal" in played else played
+
+
 STRIP_ROW = 24                  # strokes per row of the sticking strip
 
 
@@ -406,9 +417,11 @@ class Renderer:
                     # matched: what was heard ("tight edge"); wrong: the openness wanted, never the
                     # zone, since the zone is not judged (edge strokes read "tight body" as a
                     # correction until 2026-09-19: the pop punk course writes t, the user plays the edge)
-                    want, ok, played = fl.art
+                    want, ok, played, cc = fl.art
                     col = DYN_COLORS["ACCENT"] if ok else DYN_COLORS["SOFT"]
-                    ds = f.text((played or want) if ok else f"want {art_goal(want)}", f.small if ok else f.mid, lerp(col, BG, jt))
+                    heard = art_heard(played, cc, want)
+                    ds = f.text((played or want) if ok else f"want {art_goal(want)} · got {heard}", f.small if ok else f.mid,
+                                lerp(col, BG, jt))
                     surf.blit(ds, (cx - ds.get_width() / 2, self.line_y - (44 + 40 * jt) * S))
 
         if latest is not None:
@@ -430,8 +443,10 @@ class Renderer:
                 surf.blit(ds, (self.w / 2 - ds.get_width() / 2, self.h * 0.30 + 90 * S))
                 ds.set_alpha(255)
             elif latest.art and not latest.art[1]:
-                want = latest.art[0]
-                ds = f.text("RIM" if want == "rim" else "HEAD" if want == "head" else f"HAT: {art_goal(want).upper()}", f.mid, DYN_COLORS["SOFT"])
+                want, _, played, cc = latest.art
+                got = f"  ·  GOT {art_heard(played, cc, want).upper()}"
+                ds = f.text(("RIM" if want == "rim" else "HEAD" if want == "head" else f"HAT: {art_goal(want).upper()}") + got,
+                            f.mid, DYN_COLORS["SOFT"])
                 ds.set_alpha(int(255 * (1 - jt)))
                 surf.blit(ds, (self.w / 2 - ds.get_width() / 2, self.h * 0.30 + 90 * S))
                 ds.set_alpha(255)
