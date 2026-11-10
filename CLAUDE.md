@@ -494,7 +494,14 @@ selects (shift adds), dragging moves the selection in time (snapped: G cycles 1/
 1/32, triplets, off) and across lanes, a drag on empty space is a marquee, a double-click adds a
 note (the lane's median velocity), right-click or Backspace deletes, **a drum hit moves the
 selection to that drum** (a lane appears; lanes stay while editing, `build_lanes(extra=)`), arrows
-nudge, cmd Z / cmd shift Z undo / redo, cmd A all, cmd wheel zooms. Every change writes song.json
+nudge, cmd Z / cmd shift Z undo / redo, cmd A all, cmd wheel zooms. **Articulations in the editor** (2026-11-09): a drum hit
+with a selection also sets the stroke's articulation: on the hi-hat only the pedal position (tight / mid /
+open; the note keeps its zone, which `art_matches` does not judge), on snare / toms rim or not. **Right-click
+is a menu, not delete** (`songedit.Menu`, Backspace deletes): hi-hat openness (or not judged), zone body /
+edge, "strict" (`ChartNote.strict`: the zone is judged too), chick (moves to the pedal lane), snare / tom
+head / rim, dynamics free / accent / tap (`ChartNote.tap`; a song's accent or tap note is judged alone, the
+chart stays without dynamics), flam, delete. In song.json the flags follow the articulation after "+":
+"mid edge+strict+accent", "rim+flam", "tap" (`songs.FLAGS`). Every change writes song.json
 at once (times divided back to rate 1; the first keeps `song.transcribed.json`), one note per drum
 per 10 ms, and re-reads the songs course so a retry plays the edit. E / Esc done (the playhead
 parks a bar before the view), space or the Launchpad's STOP done and play. A run that was edited

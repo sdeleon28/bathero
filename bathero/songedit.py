@@ -9,9 +9,13 @@ view is the paused playhead, so the wheel, the number keys and the Launchpad's p
                             another lane
     drag on empty space     a marquee: selects every note it touches (shift: adds)
     double-click empty      a new note there, on the grid, at the lane's usual velocity
-    right-click a note      delete it (the whole selection when it is selected); Backspace / Delete
-                            delete the selection
-    hit a drum              the selection moves to that drum (a lane appears if the song had none)
+    right-click a note      the articulation menu for the selection (the note alone when it is not
+                            selected): hi-hat openness, zone and whether the zone is strict, rim / head,
+                            accent / tap, flam, delete. Backspace / Delete delete the selection
+    hit a drum              the selection moves to that drum (a lane appears if the song had none) and
+                            takes the stroke's articulation: on the hi-hat only the pedal position
+                            (tight / mid / open; the note's zone stays, and is not judged unless the
+                            menu makes it strict), on snare and toms rim or not
     up / down               nudge the selection a grid step (nothing selected: scroll a beat)
     left / right            the selection one lane over
     wheel                   scroll; with cmd / ctrl, zoom
@@ -32,7 +36,7 @@ from collections import deque
 import pygame
 
 from . import songs as SG
-from .chart import ChartNote, build_lanes
+from .chart import HH_GLYPH, ChartNote, build_lanes
 
 GRIDS = [(4, "1/16"), (2, "1/8"), (1, "1/4"), (8, "1/32"), (3, "1/8 triplets"), (6, "1/16 triplets"), (0, "off")]
 DOUBLE_CLICK_S = 0.35
@@ -42,6 +46,156 @@ MIN_HIT_PX = 14                # a note is at least this tall to the mouse
 ZOOMS = (0.25, 8.0)
 UNDO_DEPTH = 200
 BACKUP = "song.transcribed.json"
+OPENNESS = ("tight", "mid", "open")
+RIM_KEYS = ("snare", "tom1", "tom2", "tom3", "floor")
+
+
+def hh_parts(n):
+    """(openness, zone) of a hi-hat note's articulation, (None, None) without one."""
+    if n.key != "hihat" or not n.art or n.art.split()[0] not in OPENNESS:
+        return None, None
+    a = n.art.split()
+    return a[0], (a[1] if len(a) > 1 else "body")
+
+
+class Menu:
+    """The right-click menu: rows of (group, label, value) acting on the selection; stays open
+    after a choice so several can be made, closes on a click outside or Esc."""
+    ROW, HEAD, W = 30, 26, 340
+
+    def __init__(self, ed, pos):
+        self.ed, self.pos, self.hover = ed, pos, None
+        self.rows = []
+        self.layout()
+
+    def layout(self):
+        notes = list(self.ed.sel.values())
+        hh = [n for n in notes if n.key == "hihat"]
+        rim = [n for n in notes if n.key in RIM_KEYS]
+        rows = []
+
+        def group(title, items):
+            rows.append(("head", title, None, None))
+            rows.extend(items)
+
+        def state(ns, f):
+            v = {f(n) for n in ns}
+            return v.pop() if len(v) == 1 else "mixed"
+
+        if hh:
+            o = state(hh, lambda n: hh_parts(n)[0])
+            group("hi-hat openness", [("open", lbl, val, o == val) for lbl, val in
+                                      (("any (not judged)", None), ("tight", "tight"), ("mid", "mid"), ("open", "open"))])
+            withart = [n for n in hh if n.art]
+            if withart:
+                z = state(withart, lambda n: hh_parts(n)[1])
+                st = state(withart, lambda n: n.strict)
+                group("hi-hat zone", [("zone", "body", "body", z == "body"), ("zone", "edge", "edge", z == "edge"),
+                                      ("strict", "strict: only this zone counts", None, st is True)])
+            group("hi-hat foot", [("chick", "chick (to the pedal lane)", None, False)])
+        if rim:
+            r = state(rim, lambda n: n.art if n.art in ("rim", "head") else None)
+            group("snare / tom zone", [("rim", lbl, val, r == val) for lbl, val in
+                           (("any (not judged)", None), ("head only", "head"), ("rim", "rim"))])
+        d = state(notes, lambda n: "accent" if n.accent else "tap" if n.tap else None)
+        group("dynamics", [("dyn", lbl, val, d == val) for lbl, val in
+                           (("free (not judged)", None), ("accent", "accent"), ("tap (soft)", "tap"))])
+        fl = state(notes, lambda n: n.flam)
+        group(f"{len(notes)} note{'s' if len(notes) > 1 else ''}",
+              [("flam", "flam", None, fl is True), ("delete", "delete  (Backspace)", None, False)])
+        self.rows = rows
+
+    def rects(self):
+        S = self.ed.r.s
+        w = int(self.W * S)
+        h = sum(int((self.HEAD if r[0] == "head" else self.ROW) * S) for r in self.rows) + int(8 * S)
+        sw, sh = self.ed.r.w, self.ed.r.h
+        x = min(self.pos[0], sw - w - 4)
+        y = max(4, min(self.pos[1], sh - h - 4))
+        out, cy = [], y + int(4 * S)
+        for r in self.rows:
+            rh = int((self.HEAD if r[0] == "head" else self.ROW) * S)
+            out.append((r, pygame.Rect(x, cy, w, rh)))
+            cy += rh
+        return pygame.Rect(x, y, w, h), out
+
+    def at(self, pos):
+        frame, rows = self.rects()
+        for r, rect in rows:
+            if r[0] != "head" and rect.collidepoint(pos):
+                return r
+        return None
+
+    def draw(self, surf):
+        S, f = self.ed.r.s, self.ed.r.f
+        frame, rows = self.rects()
+        pygame.draw.rect(surf, (22, 22, 30), frame, border_radius=int(8 * S))
+        pygame.draw.rect(surf, (80, 200, 230), frame, 1, border_radius=int(8 * S))
+        for r, rect in rows:
+            if r[0] == "head":
+                ts = f.text(r[1].upper(), f.tiny, (120, 120, 140))
+                surf.blit(ts, (rect.x + 12 * S, rect.bottom - ts.get_height() - 3 * S))
+                continue
+            if self.hover == r:
+                pygame.draw.rect(surf, (45, 60, 75), rect.inflate(-6 * S, 0), border_radius=int(5 * S))
+            mark = "" if r[0] in ("delete", "chick") else ("●" if r[3] else "○")
+            col = (230, 90, 90) if r[0] == "delete" else (235, 235, 240) if r[3] else (170, 170, 180)
+            ts = f.text(f"{mark}  {r[1]}" if mark else r[1], f.small, col)
+            surf.blit(ts, (rect.x + 14 * S, rect.centery - ts.get_height() / 2))
+
+    def choose(self, r):
+        ed, kind, val = self.ed, r[0], r[2]
+        notes = list(ed.sel.values())
+        if kind == "delete":
+            ed.menu = None
+            ed.delete(notes)
+            return
+        ed.remember()
+        what = r[1]
+        if kind == "open":
+            for n in notes:
+                if n.key == "hihat":
+                    z = hh_parts(n)[1] or "body"
+                    n.art = f"{val} {z}" if val else None
+                    if not val:
+                        n.strict = False
+            what = f"hi-hat {val or 'openness not judged'}"
+        elif kind == "zone":
+            for n in notes:
+                o = hh_parts(n)[0]
+                if o:
+                    n.art = f"{o} {val}"
+            what = f"hi-hat {val}"
+        elif kind == "strict":
+            on = not r[3]
+            for n in notes:
+                if hh_parts(n)[0]:
+                    n.strict = on
+            what = f"zone strict {'on' if on else 'off'}"
+        elif kind == "chick":
+            for n in notes:
+                if n.key == "hihat":
+                    n.key, n.art, n.strict = "pedal", "pedal chick", False
+            what = "to the pedal chick"
+        elif kind == "rim":
+            for n in notes:
+                if n.key in RIM_KEYS:
+                    n.art = val
+            what = f"zone {val or 'not judged'}"
+        elif kind == "dyn":
+            for n in notes:
+                n.accent, n.tap = val == "accent", val == "tap"
+            what = val or "dynamics not judged"
+        elif kind == "flam":
+            on = not r[3]
+            for n in notes:
+                n.flam = on
+            what = f"flam {'on' if on else 'off'}"
+        ed.commit(f"{what} · {len(notes)} note{'s' if len(notes) > 1 else ''}")
+        if ed.sel:
+            self.layout()
+        else:
+            ed.menu = None
 
 
 class SongEditor:
@@ -62,6 +216,7 @@ class SongEditor:
         self.recording = False
         self.span = None                   # (t0, t1) being recorded: the loop's
         self.take = deque()                # (chart t, key, velocity, art) heard while recording (MIDI thread)
+        self.menu = None                   # the right-click articulation menu
 
     # --- geometry -------------------------------------------------------------------------
     @property
@@ -145,7 +300,7 @@ class SongEditor:
 
     # --- changes ------------------------------------------------------------------------------
     def snapshot(self):
-        return [(n.t, n.key, n.velocity, n.art, n.flam) for n in self.game.notes]
+        return [(n.t, n.key, n.velocity, n.art, n.flam, n.strict, n.accent, n.tap) for n in self.game.notes]
 
     def remember(self):
         self.undo.append(self.snapshot())
@@ -153,8 +308,10 @@ class SongEditor:
         self.redo.clear()
 
     def restore(self, snap):
-        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a, flam=fl) for t, k, v, a, fl in snap]
+        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a, flam=fl, strict=st, accent=ac, tap=tp)
+                              for t, k, v, a, fl, st, ac, tp in snap]
         self.sel = {}
+        self.menu = None
         self.commit()
 
     def commit(self, what=None):
@@ -239,14 +396,40 @@ class SongEditor:
         if self.game.sounds is not None:
             self.game.sounds.play(key, vel, 0.8)
 
-    def retarget(self, inst):
-        notes = [n for n in self.sel.values() if n.key != inst]
-        if not notes:
+    def retarget(self, inst, art=None):
+        """The selection to the drum hit, with the stroke's articulation: on the hi-hat the pedal
+        position only (the note keeps its zone), on snare / toms rim or not; other drums none."""
+        notes = list(self.sel.values())
+        new = {}
+        for n in notes:
+            a, strict = n.art, n.strict
+            if inst == "hihat":
+                o = art.split()[0] if art and art.split()[0] in OPENNESS else None
+                if o:
+                    z = hh_parts(n)[1] or art.split()[1]
+                    a = f"{o} {z}"
+                elif n.key != "hihat":
+                    a = None
+            elif inst in RIM_KEYS:
+                a = "rim" if art == "rim" else ("head" if n.art == "head" and n.key == inst else None)
+            elif inst == "pedal":
+                a = "pedal chick" if n.art == "pedal chick" else None
+            else:
+                a = None
+            if not a:
+                strict = False
+            if (n.key, n.art, n.strict) != (inst, a, strict):
+                new[id(n)] = (n, a, strict)
+        if not new:
             return
         self.remember()
-        for n in notes:
-            n.key = inst
-        self.commit(f"{len(notes)} note{'s' if len(notes) > 1 else ''} to the {inst}")
+        for n, a, strict in new.values():
+            n.key, n.art, n.strict = inst, a, strict
+        arts = {a for _, a, _ in new.values() if a}
+        tag = f" · {arts.pop().split()[0]}" if len(arts) == 1 else ""
+        self.commit(f"{len(new)} note{'s' if len(new) > 1 else ''} to the {inst}{tag}")
+        if self.menu is not None:
+            self.menu.layout()
 
     def nudge(self, dt_steps=0, dl=0):
         notes = list(self.sel.values())
@@ -265,26 +448,42 @@ class SongEditor:
         self.commit()
 
     # --- input ---------------------------------------------------------------------------------
-    def on_hit(self, inst, velocity):
+    def on_hit(self, inst, velocity, art=None):
         """MIDI thread: the drum sounds; with a selection it is where the selection goes."""
-        self.hits.append(inst)
+        self.hits.append((inst, art))
 
     def update(self):
         while self.hits:
-            inst = self.hits.popleft()
+            inst, art = self.hits.popleft()
             if self.sel:
-                self.retarget(inst)
+                self.retarget(inst, art)
 
     def on_mouse(self, ev):
         if self.recording:
             return
         shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+        if self.menu is not None and ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEMOTION, pygame.MOUSEBUTTONUP):
+            if ev.type == pygame.MOUSEMOTION:
+                self.menu.hover = self.menu.at(ev.pos)
+                return
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                r = self.menu.at(ev.pos)
+                if r is not None and ev.button == 1:
+                    self.menu.choose(r)
+                    return
+                if self.menu.rects()[0].collidepoint(ev.pos):
+                    return
+                self.menu = None                           # a click outside closes it (and does its own thing)
+            else:
+                return
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             self.press_left(ev.pos, shift)
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
             n = self.note_at(ev.pos)
             if n is not None:
-                self.delete(list(self.sel.values()) if self.selected(n) else [n])
+                if not self.selected(n):
+                    self.sel = {id(n): n}
+                self.menu = Menu(self, ev.pos)
         elif ev.type == pygame.MOUSEMOTION:
             self.motion(ev.pos)
         elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
@@ -413,6 +612,9 @@ class SongEditor:
         cmd = bool(mods & (pygame.KMOD_META | pygame.KMOD_CTRL))
         shift = bool(mods & pygame.KMOD_SHIFT)
         app = self.screen.app
+        if self.menu is not None and key == pygame.K_ESCAPE:
+            self.menu = None
+            return True
         if key == pygame.K_z and cmd:
             src, dst = (self.redo, self.undo) if shift else (self.undo, self.redo)
             if not src:
@@ -425,6 +627,7 @@ class SongEditor:
             self.sel = {id(n): n for n in self.game.notes}
             app.toasts.add(f"all {len(self.sel)} notes selected", (80, 200, 230), key="edit")
         elif key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+            self.menu = None
             self.delete(list(self.sel.values()))
         elif key == pygame.K_f and not cmd:
             if not self.sel:
@@ -482,6 +685,10 @@ class SongEditor:
             y = r.y_for(n.t, now)
             rect = (x, int(y - nh / 2), w, nh)
             colour = self.game.lanes[n.lane].color
+            if n.flam:
+                gw, gh = int(w * 0.5), max(3, int(nh * 0.45))
+                pygame.draw.rect(surf, colour, (int(x + (w - gw) / 2), int(y + nh / 2 + 2 * S), gw, gh),
+                                 border_radius=int(3 * S))
             if self.selected(n):
                 pygame.draw.rect(surf, (255, 255, 255), rect, border_radius=int(6 * S))
                 pygame.draw.rect(surf, colour, rect, max(2, int(3 * S)), border_radius=int(6 * S))
@@ -489,6 +696,15 @@ class SongEditor:
                 pygame.draw.rect(surf, colour, rect, border_radius=int(6 * S))
                 if accent:
                     pygame.draw.rect(surf, (255, 255, 255), rect, 2, border_radius=int(6 * S))
+            label = HH_GLYPH.get(n.art, "") if n.art else ""
+            if n.strict and label:
+                label += "!"
+            if n.accent:
+                label = ("> " + label).strip() if not label.startswith(">") else label
+            elif n.tap:
+                label = ("( " + label + " )") if label else "( )"
+            if label:
+                self.r.f.center(surf, label, self.r.f.small, (20, 20, 24), y, x + w / 2)
         if self.recording:                                 # the take so far, quantised, as outlines
             index = {l.key: i for i, l in enumerate(self.game.lanes)}
             for n in self.take_notes():
@@ -510,6 +726,8 @@ class SongEditor:
     def draw_card(self, surf, now):
         """Only the recording's state: a paused song is the editor, without a card (2026-11-09)."""
         r, f, S = self.r, self.r.f, self.r.s
+        if self.menu is not None and not self.recording:
+            self.menu.draw(surf)
         if self.recording:
             text, col = f"● RECORDING  ·  {self.chart.place(max(now, 0.0))}  ·  grid " \
                         f"{GRIDS[self.grid][1] if GRIDS[self.grid][0] else '1/16'}  ·  Esc cancels", (230, 60, 60)

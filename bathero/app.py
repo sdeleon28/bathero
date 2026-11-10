@@ -3576,18 +3576,18 @@ class PlayScreen(Screen):
             if inst is None or velocity < NAV_SOUND_MIN_VELOCITY:
                 return "edit"
             self.app.sounds.play(inst, velocity, 0.8)
+            art = self.app.ghosts.articulation_for(note)
+            if inst == "pedal":
+                art = None                                # the pedal key is the chick already
+            elif art is None:
+                zk = self.app.zone_for(note)
+                art = "rim" if zk and C.ZONE[zk].part == "rim" else None
             if ed.recording:
-                art = self.app.ghosts.articulation_for(note)
-                if inst == "pedal":
-                    art = None                            # the pedal key is the chick already
-                elif art is None:
-                    zk = self.app.zone_for(note)
-                    art = "rim" if zk and C.ZONE[zk].part == "rim" else None
                 t = self.game.song_time() - self.game.offset_ms / 1000.0
                 ed.take.append((t, inst, velocity, art))
                 return 'record'
             if velocity >= NAV_MIN_VELOCITY:
-                ed.on_hit(inst, velocity)
+                ed.on_hit(inst, velocity, art)
             return "edit"
         if self.armed:
             # the intro: every pad sounds, only the snare starts the level (the main thread does it)

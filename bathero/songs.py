@@ -24,15 +24,21 @@ SLOWER_BPM = 126          # the Twister's tempo knob goes from the song's tempo 
 MIN_RATE = 0.3            # ... but never under the game's slowest rate
 
 
+FLAGS = ("flam", "strict", "accent", "tap")
+
+
 def note_from(x):
-    """A song.json row [t, key, velocity(, art)] as a ChartNote; art may carry "+flam" ("rim+flam", "flam")."""
+    """A song.json row [t, key, velocity(, art)] as a ChartNote; art may carry flags after a "+":
+    "flam", "strict" (the zone is judged), "accent", "tap" ("rim+flam", "mid edge+strict+accent", "flam")."""
     parts = x[3].split("+") if len(x) > 3 and x[3] else []
-    art = "+".join(p for p in parts if p != "flam") or None
-    return ChartNote(t=x[0], key=x[1], velocity=x[2], art=art, flam="flam" in parts)
+    art = "+".join(p for p in parts if p not in FLAGS) or None
+    return ChartNote(t=x[0], key=x[1], velocity=x[2], art=art, flam="flam" in parts, strict="strict" in parts,
+                     accent="accent" in parts, tap="tap" in parts)
 
 
 def note_row(n, rate=1.0):
-    art = "+".join(p for p in (n.art, "flam" if n.flam else None) if p)
+    art = "+".join(p for p in (n.art, "flam" if n.flam else None, "strict" if n.strict and n.art else None,
+                               "accent" if n.accent else None, "tap" if n.tap and not n.accent else None) if p)
     return [round(n.t * rate, 4), n.key, int(n.velocity)] + ([art] if art else [])
 
 

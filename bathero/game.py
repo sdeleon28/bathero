@@ -304,11 +304,11 @@ class Game:
                 judge = "PERFECT" if a <= PERFECT_MS else "GOOD" if a <= GOOD_MS else "OK"
                 best.state, best.judge, best.error_ms = "hit", judge, err_ms
                 best.hit_velocity = velocity
-                if self.chart.dynamics:
+                if self.chart.dynamics or best.accent or best.tap:     # a song's marked notes are judged alone
                     dyn = best.dyn = dynamic_for(best.accent, velocity, best.key, self.night, self.dyn_scale(best.key))
                 if self.chart.expression and best.art:
                     best.played = art
-                    best.art_ok = art_matches(best.art, art)      # the pedal position, not the zone
+                    best.art_ok = art_matches(best.art, art, best.strict)      # the pedal position, not the zone
                     self.art_counts["ok" if best.art_ok else "wrong"] += 1
                     if best.art_ok:
                         self.score += ART_BONUS

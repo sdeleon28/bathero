@@ -69,13 +69,15 @@ HH_GLYPH = {"tight body": "+", "tight edge": ">+", "mid body": "/", "mid edge": 
             "pedal chick": "^", "rim": "r"}
 
 
-def art_matches(want: str, played: str) -> bool:
+def art_matches(want: str, played: str, strict: bool = False) -> bool:
     """Whether a played hi-hat articulation satisfies the chart's. The pedal position is what
     is judged (tight / mid / open, or the chick): the zone is the chart's suggestion, a stroke
     on the bow where the edge was written, or the other way round, is still right (asked
     2026-09-17: the ladder writes edge on the beats and bow on the &s, and either is fine)."""
     if not want or not played:
         return False
+    if strict:                                           # the song editor's "zone strict": edge is edge
+        return want == played
     return want == played or (want.split()[0] == played.split()[0] and "pedal" not in want)
 
 
@@ -151,6 +153,8 @@ class ChartNote:
     played: str = None      # the articulation actually played
     flam: bool = False      # a flam: a grace stroke on the same drum just before (song editor F)
     flam_ok: bool = None    # set when the second stroke of the flam arrives
+    strict: bool = False    # the zone (edge / body) is judged too, not only the pedal position (song editor menu)
+    tap: bool = False       # a stroke that must be soft (judged even when the chart has no dynamics; accent's opposite)
 
 
 @dataclass
