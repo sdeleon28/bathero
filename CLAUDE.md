@@ -477,7 +477,9 @@ miss). The editor keeps them. Come Out and Play's intro (bars 1..8, from the use
 hhmapper, second take) is rack tom rim on every eighth, snare rim on 2 and 4, kick 1 &2 4, and a bark (open
 edge) on the &3 closed by the chick on 4 with the snare (which of the take's snares is the 2 was a guess
 against ADTOF's kicks); bars 4 and 8 keep ADTOF's notes as rims; the ADTOF version is `song.before-rims.json`.
-**Barks** (2026-11-08): Come Out and Play's six barks ask for "mid edge" (the user's choice, for control;
+**The metronome's subdivision** follows the notes phrase by phrase (`infer_segments`), so a song's
+sixteenth fills switched it to sixteenths; `"subdivision": 2` in song.json fixes it for the whole song
+(2026-11-10, Come Out and Play: eighths throughout). **Barks** (2026-11-08): Come Out and Play's six barks ask for "mid edge" (the user's choice, for control;
 "open edge" judged their mid barks wrong), closed by the chick.
 **Flams** (asked for 2026-11-08): **F** in the editor toggles `ChartNote.flam` on the selection (stored as
 "+flam" in the articulation field: "rim+flam", "flam"; `songs.note_from` / `note_row`). Drawn as a small

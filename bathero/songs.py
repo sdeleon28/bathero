@@ -144,7 +144,8 @@ def load():
             pass
         diff = difficulty(notes)
         out.append((diff, Chart(name=f"♪ {s['title']}", notes=notes, bpm=s["bpm"], beats=s["beats"], backing="song",
-                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections, expression=any(n.art or n.flam for n in notes),
+                                song=os.path.join(SONGS_DIR, d), song_offset=s["offset"], sections=sections,
+                                segments=[(0, s["subdivision"])] if s.get("subdivision") else None, expression=any(n.art or n.flam for n in notes),
                                 desc=f"difficulty {diff:.1f} · imported {s.get('made', '')}"
                                      + (f" · edited {s['edited']}" if s.get("edited") else ""))))
     out.sort(key=lambda x: (x[0], x[1].name.lower()))
