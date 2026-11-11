@@ -24,7 +24,7 @@ SLOWER_BPM = 126          # the Twister's tempo knob goes from the song's tempo 
 MIN_RATE = 0.3            # ... but never under the game's slowest rate
 
 
-FLAGS = ("flam", "strict", "accent", "tap")
+FLAGS = ("flam", "strict", "accent", "tap", "cresc")
 
 
 def note_from(x):
@@ -33,12 +33,13 @@ def note_from(x):
     parts = x[3].split("+") if len(x) > 3 and x[3] else []
     art = "+".join(p for p in parts if p not in FLAGS) or None
     return ChartNote(t=x[0], key=x[1], velocity=x[2], art=art, flam="flam" in parts, strict="strict" in parts,
-                     accent="accent" in parts, tap="tap" in parts)
+                     accent="accent" in parts, tap="tap" in parts, cresc="cresc" in parts)
 
 
 def note_row(n, rate=1.0):
     art = "+".join(p for p in (n.art, "flam" if n.flam else None, "strict" if n.strict and n.art else None,
-                               "accent" if n.accent else None, "tap" if n.tap and not n.accent else None) if p)
+                               "accent" if n.accent else None, "tap" if n.tap and not n.accent else None,
+                               "cresc" if n.cresc else None) if p)
     return [round(n.t * rate, 4), n.key, int(n.velocity)] + ([art] if art else [])
 
 

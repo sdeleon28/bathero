@@ -477,7 +477,16 @@ miss). The editor keeps them. Come Out and Play's intro (bars 1..8, from the use
 hhmapper, second take) is rack tom rim on every eighth, snare rim on 2 and 4, kick 1 &2 4, and a bark (open
 edge) on the &3 closed by the chick on 4 with the snare (which of the take's snares is the 2 was a guess
 against ADTOF's kicks); bars 4 and 8 keep ADTOF's notes as rims; the ADTOF version is `song.before-rims.json`.
-**The metronome's subdivision** follows the notes phrase by phrase (`infer_segments`), so a song's
+**Crescendos** (asked 2026-11-10 for Come Out and Play): `ChartNote.cresc` ("+cresc" in song.json, a
+toggle in the editor's menu). `Chart.crescendos()` groups them into runs (one family, the toms as one voice,
+no gap over 0.75 s; strokes within 30 ms are one step). On the highway a hairpin opens from the run's first
+stroke to its last (orange louder, green "open the hat"), gone once played. Judged as a bonus only
+(`Game._check_cresc` when the run's last note resolves): the steps' velocity, or on the hi-hat the pedal
+opening (CC4 going down, `ChartNote.hit_cc`), must rise 12 velocity / 8 CC from the first third to the last
+and follow the order (Pearson >= 0.5): `CRESC_BONUS` 60 a step and a burst ("CRESCENDO +N"); a flat one
+earns nothing and gets a quiet line. A mid hat note in a crescendo also accepts open. Come Out and Play: the
+verses' hats before the ride are tight, the two bars after it mid crescendo, the tom fills' strokes after
+the first one crescendo. **The metronome's subdivision** follows the notes phrase by phrase (`infer_segments`), so a song's
 sixteenth fills switched it to sixteenths; `"subdivision": 2` in song.json fixes it for the whole song
 (2026-11-10, Come Out and Play: eighths throughout). **Barks** (2026-11-08): Come Out and Play's six barks ask for "mid edge" (the user's choice, for control;
 "open edge" judged their mid barks wrong), closed by the chick.

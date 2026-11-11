@@ -69,6 +69,10 @@ HH_GLYPH = {"tight body": "+", "tight edge": ">+", "mid body": "/", "mid edge": 
             "pedal chick": "^", "rim": "r"}
 
 
+CRESC_FAMILY = {"tom1": "toms", "tom2": "toms", "tom3": "toms", "floor": "toms"}
+CRESC_GAP_S = 0.75          # a crescendo run breaks where its family is silent longer than this
+
+
 def art_matches(want: str, played: str, strict: bool = False) -> bool:
     """Whether a played hi-hat articulation satisfies the chart's. The pedal position is what
     is judged (tight / mid / open, or the chick): the zone is the chart's suggestion, a stroke
@@ -155,6 +159,8 @@ class ChartNote:
     flam_ok: bool = None    # set when the second stroke of the flam arrives
     strict: bool = False    # the zone (edge / body) is judged too, not only the pedal position (song editor menu)
     tap: bool = False       # a stroke that must be soft (judged even when the chart has no dynamics; accent's opposite)
+    cresc: bool = False     # part of a crescendo (Chart.crescendos): louder stroke by stroke, or the hat opening
+    hit_cc: int = None      # the hi-hat pedal's CC4 at the stroke that took the note (0 open .. 90 closed)
 
 
 @dataclass
@@ -253,6 +259,32 @@ class Chart:
     @property
     def length(self):
         return self.notes[-1].t if self.notes else 0.0
+
+    def crescendos(self):
+        """Runs of crescendo notes: [[[i, ...], ...], ...], a run a list of steps (the note indices
+        sounding together, within 30 ms), each run one family (the hi-hat, or the toms as one
+        voice) with no gap over CRESC_GAP_S. Cached; the song editor clears _cresc_cache."""
+        c = getattr(self, "_cresc_cache", None)
+        if c is not None and c[0] == len(self.notes):
+            return c[1]
+        runs, open_ = [], {}
+        for i, n in enumerate(self.notes):
+            if not n.cresc:
+                continue
+            fam = CRESC_FAMILY.get(n.key, n.key)
+            run = open_.get(fam)
+            last = self.notes[run[-1][-1]].t if run else None
+            if run is None or n.t - last > CRESC_GAP_S:
+                run = open_[fam] = []
+                runs.append(run)
+            if run and n.t - self.notes[run[-1][0]].t <= 0.03:
+                run[-1].append(i)
+            else:
+                run.append([i])
+        runs = [r for r in runs if len(r) >= 2]
+        runs.sort(key=lambda r: r[0][0])
+        self._cresc_cache = (len(self.notes), runs)
+        return runs
 
     def doubles(self):
         """The doubles: runs of two or three consecutive strokes of one hand (or foot) on one

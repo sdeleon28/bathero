@@ -39,6 +39,9 @@ DYN_SCALE_MIN, DYN_SCALE_MAX = 0.5, 1.3
 CONTRAST_TARGET = 1.4    # median accent velocity / median tap velocity to aim for
 DYN_BONUS = 30           # score for the right dynamic on a hit note
 ART_BONUS = 30           # score for the right hi-hat articulation on a hit note
+CRESC_BONUS = 60         # per step of a crescendo played growing (never a penalty: a flat one just earns nothing)
+CRESC_RISE = {"vel": 12, "cc": 8}   # the last third over the first third, velocity / pedal CC4, to count as growing
+CRESC_CORR = 0.5         # and the values must follow the order of the steps this well (Pearson)
 # Stars: a 0..100 grade from accuracy (half), hit quality (PERFECT 1, GOOD 0.6, OK 0.3) and
 # dynamics (or quality again when the chart has none), minus strays, cut at these grades.
 STAR_GRADES = [30, 50, 70, 85, 94]
@@ -139,7 +142,7 @@ class Game:
         with self.lock:
             for n in self.notes:
                 n.state, n.judge, n.error_ms, n.sounded = "pending", None, None, False
-                n.hit_velocity, n.dyn = None, None
+                n.hit_velocity, n.dyn, n.hit_cc = None, None, None
             self.wall_start = time.perf_counter()
             self.paused_at = None
             self.paused_total = 0.0
@@ -151,6 +154,8 @@ class Game:
             self.dyn_counts = {k: 0 for k in ("ACCENT", "TAP", "SOFT", "LOUD")}
             self.dyn_seen = {"accent": 0, "tap": 0}   # chart notes resolved so far (hit or missed): the HUD's denominators
             self.art_counts = {"ok": 0, "wrong": 0}
+            self.cresc_done = set()             # crescendo runs (Chart.crescendos index) already scored
+            self.cresc_events = deque(maxlen=8)     # (wall_t, lanes, ok, bonus, hat) for the burst on screen
             self.cursor = 0                     # first note that may still be pending
             self.guide_cursor = 0
             self.last_click_beat = None
@@ -193,7 +198,7 @@ class Game:
         a phrase can be played again. count_in: seconds of run-up before t, chart silent,
         for the notes to come down the screen."""
         for n in self.notes:
-            n.judge = n.error_ms = n.hit_velocity = n.dyn = n.art_ok = n.played = None
+            n.judge = n.error_ms = n.hit_velocity = n.dyn = n.art_ok = n.played = n.hit_cc = None
             if n.t < t:
                 n.state, n.sounded = "skip", True
             else:
@@ -209,6 +214,7 @@ class Game:
         self.seeked = True
         self.combo = 0
         self.flashes.clear()
+        self.cresc_done = set()
         self.stop_tracks()                               # _drive_tracks restarts them at the new position
 
     def set_loop(self, bounds):
@@ -267,9 +273,10 @@ class Game:
             if self.log is not None:
                 self.log.add("unmapped", note=note, velocity=velocity)
             return None
-        return self.hit_lane(lane, velocity, wall_t, note, art)
+        return self.hit_lane(lane, velocity, wall_t, note, art, cc)
 
-    def hit_lane(self, lane: int, velocity: int = 100, wall_t: float = None, note: int = None, art: str = None):
+    def hit_lane(self, lane: int, velocity: int = 100, wall_t: float = None, note: int = None, art: str = None,
+                 cc: int = None):
         if wall_t is None:
             wall_t = time.perf_counter()
         if self.sounds:
@@ -304,16 +311,20 @@ class Game:
                 judge = "PERFECT" if a <= PERFECT_MS else "GOOD" if a <= GOOD_MS else "OK"
                 best.state, best.judge, best.error_ms = "hit", judge, err_ms
                 best.hit_velocity = velocity
+                best.hit_cc = cc
                 if self.chart.dynamics or best.accent or best.tap:     # a song's marked notes are judged alone
                     dyn = best.dyn = dynamic_for(best.accent, velocity, best.key, self.night, self.dyn_scale(best.key))
                 if self.chart.expression and best.art:
                     best.played = art
                     self._played_cc = cc                          # the pedal's CC4 at the stroke, for the feedback
-                    best.art_ok = art_matches(best.art, art, best.strict)      # the pedal position, not the zone
+                    best.art_ok = art_matches(best.art, art, best.strict) or (     # the pedal position, not the zone
+                        best.cresc and best.art.split()[0] == "mid" and bool(art) and art.split()[0] == "open")
                     self.art_counts["ok" if best.art_ok else "wrong"] += 1
                     if best.art_ok:
                         self.score += ART_BONUS
             self._register(judge, lane, err_ms, velocity, wall_t, best, dyn)
+            if best is not None and best.cresc:
+                self._check_cresc(wall_t)
             self.strokes.append((t, self.lanes[lane].key))
             if self.log is not None:
                 self.log.add("hit", note=note, velocity=velocity, key=self.lanes[lane].key, lane=lane, judge=judge,
@@ -323,6 +334,47 @@ class Game:
                              art=best.art if best else None, played=art, art_ok=best.art_ok if best else None,
                              combo=self.combo, score=self.score)
             return judge
+
+    def _check_cresc(self, wall_t=None):
+        """Score every crescendo run whose notes are all resolved, once: a bonus when it grew
+        (velocity, or the hat opening: CC4 going down), a gentle word when it did not."""
+        for k, run in enumerate(self.chart.crescendos()):
+            if k in self.cresc_done:
+                continue
+            notes = [self.notes[i] for step in run for i in step]
+            if any(n.state == "pending" for n in notes) or all(n.state == "skip" for n in notes):
+                if all(n.state == "skip" for n in notes):
+                    self.cresc_done.add(k)
+                continue
+            self.cresc_done.add(k)
+            hh = all(n.key == "hihat" for n in notes)
+            vals = []
+            for step in run:
+                hit = [self.notes[i] for i in step if self.notes[i].state == "hit"]
+                if hh:
+                    v = [-n.hit_cc for n in hit if n.hit_cc is not None]
+                else:
+                    v = [n.hit_velocity for n in hit if n.hit_velocity is not None]
+                vals.append(max(v) if v else None)
+            pts = [(j, v) for j, v in enumerate(vals) if v is not None]
+            ok, rise = False, 0
+            if len(pts) >= 3 and len(pts) >= 0.7 * len(run):
+                third = max(1, len(pts) // 3)
+                rise = sum(v for _, v in pts[-third:]) / third - sum(v for _, v in pts[:third]) / third
+                xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+                mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+                sxy = sum((x - mx) * (y - my) for x, y in pts)
+                sxx = sum((x - mx) ** 2 for x in xs) or 1
+                syy = sum((y - my) ** 2 for y in ys) or 1
+                corr = sxy / (sxx * syy) ** 0.5
+                ok = rise >= CRESC_RISE["cc" if hh else "vel"] and corr >= CRESC_CORR
+            bonus = CRESC_BONUS * len(run) if ok else 0
+            self.score += bonus
+            lanes = sorted({n.lane for n in notes})
+            self.cresc_events.append((time.perf_counter() if wall_t is None else wall_t, lanes, ok, bonus, hh))
+            if self.log is not None:
+                self.log.add("cresc", ok=ok, bonus=bonus, hat=hh, steps=len(run), rise=round(rise, 1),
+                             values=vals, chart_t=round(notes[0].t, 4))
 
     def _flam_partner(self, lane, t):
         """A flam note on this lane hit within FLAM_S before t whose second stroke has not come."""
@@ -376,6 +428,8 @@ class Game:
                     self._register("MISS", n.lane, None, 0, time.perf_counter(), n)
                     if self.log is not None:
                         self.log.add("miss", key=n.key, chart_t=round(n.t, 4), accent=n.accent, hand=n.hand)
+                    if n.cresc:
+                        self._check_cresc()
             while self.cursor < len(self.notes) and self.notes[self.cursor].state != "pending":
                 self.cursor += 1
             if not self.finished and self.loop is None and t > self.notes[-1].t + TAIL_S:

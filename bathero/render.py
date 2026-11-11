@@ -65,6 +65,8 @@ def lerp(a, b, k):
 # lanes away and the first version made a bar of tight hats look like a bar of kicks); mid a
 # gold clear of the snare's orange; open the green of "pedal up".
 OPENNESS_COLORS = {"tight": (240, 70, 140), "mid": (250, 215, 70), "open": (110, 220, 110)}
+CRESC_COLORS = {"hat": (110, 220, 110), "drum": (255, 150, 60)}   # the wedge: the hat opening (open green), louder (orange)
+CRESC_BURST_S = 1.3
 
 
 STAR = (250, 200, 60)
@@ -237,6 +239,82 @@ class Renderer:
             x, w = x + int(w * 0.15), int(w * 0.7)
         return x, w, nh, accent
 
+    def crescendos(self, surf, now, top, editing=False, outline=False):
+        """A hairpin behind every crescendo run (Chart.crescendos): a wedge from a point at its
+        first stroke opening to the run's lanes' full width at its last, so 'grow' reads at a
+        glance; green for the hi-hat (open the pedal as it goes), orange for drums (louder).
+        Gone once the run is played (the burst takes over); in the editor, always shown."""
+        g, S = self.game, self.s
+        for run in g.chart.crescendos():
+            first, last = g.notes[run[0][0]], g.notes[run[-1][0]]
+            if first.t > top or last.t < now - MISS_FADE_S:
+                continue
+            notes = [g.notes[i] for step in run for i in step]
+            if not editing and all(n.state != "pending" for n in notes):
+                continue
+            lanes = sorted({n.lane for n in notes})
+            x0, x1 = self.lane_x[lanes[0]] + 4 * S, self.lane_x[lanes[-1]] + self.lane_w - 6 * S
+            cx = (x0 + x1) / 2
+            y0, y1 = self.y_for(first.t, now), self.y_for(last.t, now) - self.note_h * 0.8
+            hat = all(n.key == "hihat" for n in notes)
+            col = CRESC_COLORS["hat" if hat else "drum"]
+            pts = [(cx, y0 + self.note_h * 0.8), (x0, y1), (x1, y1)]
+            box = pygame.Rect(int(x0) - 2, int(min(y1, y0) - 2), int(x1 - x0) + 4, int(abs(y0 - y1) + self.note_h * 0.8) + 4)
+            if box.w <= 0 or box.h <= 0:
+                continue
+            if not outline:                              # the fill, under the notes
+                layer = pygame.Surface(box.size, pygame.SRCALPHA)
+                local = [(px - box.x, py - box.y) for px, py in pts]
+                pygame.draw.polygon(layer, (*col, 70), local)
+                surf.blit(layer, box.topleft)
+                continue
+            wd = max(2, int(3 * S))                      # the hairpin's two lines and its word, over the notes
+            pygame.draw.line(surf, col, pts[0], pts[1], wd)
+            pygame.draw.line(surf, col, pts[0], pts[2], wd)
+            label = "cresc. · open the hat" if hat else "cresc."
+            ts = self.f.text(label, self.f.small, col)
+            bg = pygame.Rect(0, 0, ts.get_width() + 10 * S, ts.get_height() + 4 * S)
+            bg.midleft = (x1 + 8 * S, pts[0][1])
+            if bg.right > self.w:
+                bg.midright = (x0 - 8 * S, pts[0][1])
+            pygame.draw.rect(surf, (16, 16, 22), bg, border_radius=int(4 * S))
+            surf.blit(ts, (bg.x + 5 * S, bg.y + 2 * S))
+
+    def cresc_bursts(self, surf, wall):
+        """A played crescendo: rings and sparks over its lanes at the line and "CRESCENDO +N";
+        one that did not grow gets a quiet line, never a penalty."""
+        S, f = self.s, self.f
+        for t0, lanes, ok, bonus, hat in self.game.cresc_events:
+            age = (wall - t0) / CRESC_BURST_S
+            if not 0 <= age <= 1:
+                continue
+            x0, x1 = self.lane_x[lanes[0]], self.lane_x[lanes[-1]] + self.lane_w
+            cx, cy = (x0 + x1) / 2, self.line_y
+            if not ok:
+                ts = f.text("crescendo: let it grow" if not hat else "crescendo: open the hat as you go", f.small, DIM)
+                ts.set_alpha(int(220 * (1 - age)))
+                surf.blit(ts, (cx - ts.get_width() / 2, cy - 120 * S))
+                ts.set_alpha(255)
+                continue
+            col = CRESC_COLORS["hat" if hat else "drum"]
+            e = 1 - (1 - age) ** 3
+            layer = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
+            for k, lag in enumerate((0.0, 0.12)):
+                a = max(0.0, min(1.0, (age - lag) / (1 - lag)))
+                r = int((30 + 180 * (1 - (1 - a) ** 3)) * S)
+                if 0 < a < 1:
+                    pygame.draw.circle(layer, (*col, int(200 * (1 - a))), (int(cx), int(cy)), r, max(2, int((4 - k) * S)))
+            for k in range(16):
+                ang = k / 16 * math.tau + 0.3
+                d = (40 + 220 * e) * S
+                px, py = cx + math.cos(ang) * d, cy + math.sin(ang) * d * 0.6
+                pygame.draw.circle(layer, (*col, int(255 * (1 - age))), (int(px), int(py)), max(2, int(5 * S * (1 - age))))
+            surf.blit(layer, (0, 0))
+            ts = f.text(f"CRESCENDO  +{bonus}", f.large, col)
+            ts.set_alpha(int(255 * min(1.0, 3 * (1 - age))))
+            surf.blit(ts, (cx - ts.get_width() / 2, cy - (110 + 40 * e) * S))
+            ts.set_alpha(255)
+
     def doubles(self, surf, now, top, shift=0.0, within=None):
         """A bracket beside every double (Chart.doubles) on the side of the hand that plays
         it, in that hand's colour from the sticking strip: ] to the right of an R R, [ to
@@ -364,10 +442,12 @@ class Renderer:
             top = self.edit.window()[1]
             self.edit.draw_grid(surf, now)
             self.markers(surf, now, top, loop)
+            self.crescendos(surf, now, top, editing=True)
             self.edit.draw_notes(surf, now)
             notes = []
         else:
             self.markers(surf, now, top, loop)
+            self.crescendos(surf, now, top)
             notes = g.notes[max(0, lo - 64):]
         for n in notes:
             if n.t > top:
@@ -389,6 +469,9 @@ class Renderer:
                     self.note(surf, n, n.t + (b - a), now, coming=True)
                 self.doubles(surf, now, top, shift=b - a, within=(a, a + ahead))
         self.marker_names(surf)
+        self.crescendos(surf, now, top, editing=self.edit is not None, outline=True)
+        if self.edit is None:
+            self.cresc_bursts(surf, wall)
 
         # flashes: ring at the line + error number, drawn the frame after the hit arrives
         latest = None

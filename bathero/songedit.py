@@ -101,8 +101,10 @@ class Menu:
         group("dynamics", [("dyn", lbl, val, d == val) for lbl, val in
                            (("free (not judged)", None), ("accent", "accent"), ("tap (soft)", "tap"))])
         fl = state(notes, lambda n: n.flam)
+        cr = state(notes, lambda n: n.cresc)
         group(f"{len(notes)} note{'s' if len(notes) > 1 else ''}",
-              [("flam", "flam", None, fl is True), ("delete", "delete  (Backspace)", None, False)])
+              [("cresc", "crescendo (louder / hat opening)", None, cr is True), ("flam", "flam", None, fl is True),
+               ("delete", "delete  (Backspace)", None, False)])
         self.rows = rows
 
     def rects(self):
@@ -186,6 +188,11 @@ class Menu:
             for n in notes:
                 n.accent, n.tap = val == "accent", val == "tap"
             what = val or "dynamics not judged"
+        elif kind == "cresc":
+            on = not r[3]
+            for n in notes:
+                n.cresc = on
+            what = f"crescendo {'on' if on else 'off'}"
         elif kind == "flam":
             on = not r[3]
             for n in notes:
@@ -300,7 +307,7 @@ class SongEditor:
 
     # --- changes ------------------------------------------------------------------------------
     def snapshot(self):
-        return [(n.t, n.key, n.velocity, n.art, n.flam, n.strict, n.accent, n.tap) for n in self.game.notes]
+        return [(n.t, n.key, n.velocity, n.art, n.flam, n.strict, n.accent, n.tap, n.cresc) for n in self.game.notes]
 
     def remember(self):
         self.undo.append(self.snapshot())
@@ -308,8 +315,8 @@ class SongEditor:
         self.redo.clear()
 
     def restore(self, snap):
-        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a, flam=fl, strict=st, accent=ac, tap=tp)
-                              for t, k, v, a, fl, st, ac, tp in snap]
+        self.game.notes[:] = [ChartNote(t=t, key=k, velocity=v, art=a, flam=fl, strict=st, accent=ac, tap=tp, cresc=cr)
+                              for t, k, v, a, fl, st, ac, tp, cr in snap]
         self.sel = {}
         self.menu = None
         self.commit()
@@ -332,6 +339,7 @@ class SongEditor:
         notes[:] = out
         self.relane()
         self.chart._phrase_cache = None
+        self.chart._cresc_cache = None
         self.screen._lp_colours = None
         self.save()
         if what:
