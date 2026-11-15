@@ -731,6 +731,8 @@ class App:
         if lp.inp is not None and now - max(lp.heard, lp.opened) > self.PORT_REFRESH_S:
             lp.refresh()                            # an idle input may have gone deaf (Launchpad.refresh)
         if lp.inp is None or self.twister_bank != LP.LENT_BANK:
+            if self.launchpad_queue:
+                print(f"launchpad: {len(self.launchpad_queue)} press(es) ignored, bathero thinks the Twister is on bank {self.twister_bank}", flush=True)
             self.launchpad_queue.clear()
             return
         scr = self.screen_obj if isinstance(self.screen_obj, PlayScreen) else None
