@@ -640,9 +640,6 @@ class App:
                 self.toasts.add(f"Twister: bank 2 is the song mixer", ACCENT, key="twister")
                 self.sync_twister()
                 self.twister_resync_at = now + 1.0       # again, in case a replugged Twister was still booting
-        tw = self.twister
-        if tw.inp is not None and now - max(tw.heard, tw.opened) > self.PORT_REFRESH_S:
-            tw.refresh()                                 # an idle input may have gone deaf (Twister.refresh)
         if getattr(self, "twister_resync_at", None) and now >= self.twister_resync_at:
             self.twister_resync_at = None
             self.sync_twister()
@@ -700,8 +697,6 @@ class App:
                 scr.retry()
             self.tw_seen = (time.perf_counter(), "tempo")     # the applied tempo stays up a moment
 
-    PORT_REFRESH_S = 10.0     # an input silent this long is reopened (a deaf CoreMIDI connection heals by itself)
-
     def on_twister_bank(self, bank):
         """The Twister changed bank: on bank 2 the Launchpad is ours (GroupCtl lets go of it at the
         same message), anywhere else it is GroupCtl's and we stop sending."""
@@ -709,8 +704,6 @@ class App:
         self.twister_bank = bank
         LP.write_bank(bank)
         print(f"twister: bank {bank} (was {was})", flush=True)
-        if bank == LP.LENT_BANK and self.launchpad.inp is not None:
-            self.launchpad.refresh()                # the gesture heals a deaf Launchpad input on its own
         self.launchpad.forget()
         self.launchpad_queue.clear()
         if bank == LP.LENT_BANK:
@@ -728,8 +721,6 @@ class App:
         if lp.inp is None and now - self.launchpad_checked > 3.0:
             self.launchpad_checked = now
             lp.open()
-        if lp.inp is not None and now - max(lp.heard, lp.opened) > self.PORT_REFRESH_S:
-            lp.refresh()                            # an idle input may have gone deaf (Launchpad.refresh)
         if lp.inp is None or self.twister_bank != LP.LENT_BANK:
             if self.launchpad_queue:
                 print(f"launchpad: {len(self.launchpad_queue)} press(es) ignored, bathero thinks the Twister is on bank {self.twister_bank}", flush=True)
