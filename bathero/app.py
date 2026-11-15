@@ -137,7 +137,9 @@ class App:
         self.launchpad = LP.Launchpad(lambda kind, name: self.launchpad_queue.append((kind, name)))
         self.lp_explorer = LP.Explorer()
         self.twister_bank = 1
-        self.lp_lent = LP.read_lent()     # the Launchpad is ours: UP + DOWN together toggle it (launchpad.py)
+        self.lp_lent = LP.read_lent()     # the Launchpad is ours: GroupCtl decides and writes the file (launchpad.py)
+        self.lp_lent_stamp = LP.lent_stamp()
+        self.lp_lent_checked = 0.0
         self.launchpad_checked = 0.0
         self.lp_repaint_at = None
         self.twister_checked = 0.0
@@ -708,11 +710,10 @@ class App:
         if bank == 2:
             self.sync_twister()                     # bank 2's LEDs and rings, also after a replug the watcher missed
 
-    def set_lent(self, lent, why="UP + DOWN"):
-        """The Launchpad is ours (lent) or GroupCtl's; GroupCtl toggles at the same chord."""
+    def set_lent(self, lent, why="GroupCtl"):
+        """GroupCtl lent the Launchpad to us or took it back (its file changed); bathero never decides."""
         was = self.lp_lent
         self.lp_lent = lent
-        LP.write_lent(lent)
         print(f"launchpad: {'lent' if lent else 'returned'} ({why})", flush=True)
         self.launchpad.forget()
         self.launchpad_queue.clear()
@@ -729,14 +730,14 @@ class App:
         if lp.inp is None and now - self.launchpad_checked > 3.0:
             self.launchpad_checked = now
             lp.open()
-        if any(k == "lend" for k, _ in self.launchpad_queue):
-            flips = sum(1 for k, _ in self.launchpad_queue if k == "lend")
-            rest = [e for e in self.launchpad_queue if e[0] != "lend"]
-            if flips % 2:
-                self.set_lent(not self.lp_lent)
-            self.launchpad_queue.clear()
-            if self.lp_lent:
-                self.launchpad_queue.extend(rest)
+        if now - self.lp_lent_checked > 0.1:            # GroupCtl's file: the only say on the lending
+            self.lp_lent_checked = now
+            stamp = LP.lent_stamp()
+            if stamp != self.lp_lent_stamp:
+                self.lp_lent_stamp = stamp
+                lent = LP.read_lent()
+                if lent != self.lp_lent:
+                    self.set_lent(lent)
         if lp.inp is None or not self.lp_lent:
             if self.launchpad_queue:
                 print(f"launchpad: {len(self.launchpad_queue)} press(es) ignored, not lent", flush=True)
@@ -955,10 +956,6 @@ class App:
         pads are painted whole (a replugged controller comes back dark, and until 2026-11-08 the
         game kept its old ports and never repainted). True when the port was one of them."""
         low = name.lower()
-        if (TWISTER_HINT in low or LP.PORT_HINT in low) and self.lp_lent:
-            # a controller came or went: Bitwig restarts GroupCtl, which starts with the Launchpad
-            # its own (not lent); UP + DOWN lends it again on both sides
-            self.set_lent(False, why="a controller was replugged")
         if TWISTER_HINT in low:
             self.twister.close()
             self.twister_checked = 0.0              # poll_twister reopens it and syncs the rings

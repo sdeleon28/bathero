@@ -1,14 +1,13 @@
 """The Launchpad MK2 as the level's navigator, while it is lent to bathero.
 
 The Launchpad is GroupCtl's (bitwig-maps) the rest of the time. **UP and DOWN pressed together**
-(the second one down while the first is held) toggle the lending, and both programs hear the
-chord: lent, GroupCtl's `launchpadlending` package stops painting and listening; returned, it
-repaints its page. bathero takes over at the same chord, paints the whole surface (twice, in case
-a last frame of GroupCtl's lands after the first), and on return just stops sending: it never
-blanks the surface to hand it back, GroupCtl repaints it. Until 2026-11-15 the Twister's bank
-buttons did this and it kept slipping out of step; the Twister's bank no longer touches it. The
-state is kept in ~/.config/bathero/launchpad_lent, since the game is relaunched by every deploy
-and GroupCtl is not.
+toggle the lending, and **only GroupCtl decides it**: its `launchpadlending` package writes
+~/.config/bathero/launchpad_lent ("1" lent, "0" not; "0" when GroupCtl starts and exits), and
+bathero only watches that file (`App.poll_launchpad`, every frame by mtime). Lent, GroupCtl stops
+painting and listening and bathero paints the whole surface (twice, in case a last frame of
+GroupCtl's lands after the first); returned, bathero stops sending without blanking and GroupCtl
+repaints its page. Until 2026-11-15 both sides kept their own state (the Twister's bank, then the
+chord heard by both) and they slipped out of step.
 
 The controls are GroupCtl's project explorer (baseexplorer, normalexplorer), on the level instead
 of the arranger: the 64 pads are the level's bars in reading order from the top left, each bar
@@ -69,13 +68,12 @@ def read_lent():
         return False
 
 
-def write_lent(lent):
+def lent_stamp():
+    """The file's mtime (None when missing): App.poll_launchpad re-reads it when this changes."""
     try:
-        os.makedirs(os.path.dirname(LENT_FILE), exist_ok=True)
-        with open(LENT_FILE, "w") as f:
-            f.write("1\n" if lent else "0\n")
+        return os.stat(LENT_FILE).st_mtime_ns
     except OSError:
-        pass
+        return None
 
 
 class Launchpad:
@@ -88,7 +86,6 @@ class Launchpad:
         self.inp = self.out = None
         self.name = None
         self.held = {}
-        self.arrows = {}           # CC 104 / 105 -> held: UP + DOWN together toggle the lending
         self.shown = {}            # ("note" | "cc", n) -> (colour, blink)
         self.lock = threading.Lock()
         self.heard = 0.0           # perf_counter of the last message in (App.poll_launchpad refreshes an idle port)
@@ -123,14 +120,6 @@ class Launchpad:
     def _cb(self, msg):
         now = time.perf_counter()
         self.heard = now
-        if msg.type == "control_change" and msg.control in (104, 105):
-            down = msg.value > 0
-            other = 105 if msg.control == 104 else 104
-            chord = down and self.arrows.get(other, False)
-            self.arrows[msg.control] = down
-            if chord:
-                self.on_event("lend", None)      # UP + DOWN: the lending toggles (GroupCtl hears it too)
-            return
         if msg.type == "control_change" and msg.control in TOP:
             if msg.value > 0:
                 self.on_event("top", TOP[msg.control])
