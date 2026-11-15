@@ -389,13 +389,15 @@ sent on opening and again a second later (it may still be booting), the Launchpa
 (`close` forgets what was lit). Entering bank 2 also re-sends the Twister's LEDs and rings, which
 covers a replug quicker than the watcher's 1.5 s poll.
 
-**The Launchpad MK2 on Twister bank 2** (`bathero/launchpad.py`, asked for 2026-11-08): the bank
-buttons send CC 0..3 on channel 4 (bank 1..4; 127 for the bank entered, 0 for the one left).
-GroupCtl's `launchpadlending` package hears it too: on bank 2 its `LaunchpadOutput` /
-`LaunchpadInput` go quiet (`LaunchpadLent`), on bank 1 the `Pager` clears and re-announces its page
-(`LaunchpadReturned`). bathero paints the whole surface on bank 2 (again 0.3 s later, over a late
-frame of GroupCtl's) and on bank 1 stops sending without blanking. The last bank is kept in
-`~/.config/bathero/twister_bank` (a relaunch does not hear it). On the play screen it is GroupCtl's
+**The Launchpad MK2, lent with UP + DOWN** (`bathero/launchpad.py`, asked for 2026-11-08; the
+gesture since 2026-11-15, the Twister's bank switching kept slipping out of step): pressing **UP and
+DOWN together** toggles the lending, and both programs hear the chord. GroupCtl's `launchpadlending`
+package (`LaunchpadLendToggled`, detected in its `LaunchpadInput` even while lent) makes its
+`LaunchpadOutput` / `LaunchpadInput` go quiet (`LaunchpadLent`) or has the `Pager` clear and
+re-announce its page (`LaunchpadReturned`). The Twister's bank no longer touches it.
+bathero paints the whole surface when lent (again 0.3 s later, over a late
+frame of GroupCtl's) and when returned stops sending without blanking. The state is kept in
+`~/.config/bathero/launchpad_lent` (deploys relaunch the game, GroupCtl stays). On the play screen it is GroupCtl's
 project explorer over the level: 64 pads = the level's bars from the top left, coloured by phrase,
 up to N bars of one phrase per pad; a pad jumps there (a bar of run-up, the screen says "bar 18");
 SESSION / USER 1 zoom out / in (1..32 bars a pad, auto-fit on a new level and on entering bank 2
@@ -404,11 +406,12 @@ until zoomed by hand); LEFT / RIGHT page; MIXER then two pads marks a loop of ba
 either as times, which the renderer draws); side MUTE toggles the loop, side STOP pauses / plays
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
-**Keeping the lending in step** (2026-11-14): a controller that leaves or arrives puts everyone on bank 1
-(`controller_port`: Bitwig restarts GroupCtl, which starts not lent, and a Twister powers up on bank 1;
-bathero sends the Twister to bank 1 too, `Twister.set_bank`): press bank 2 again. bathero.log records
-every bank change ("twister: bank 2 (was 1)"), every Launchpad press acted on, and the presses dropped
-for the bank. **Never close or reopen a MIDI port from the main thread on a timer**: a periodic
+**Keeping the lending in step**: a controller that leaves or arrives returns it on bathero's side
+(`controller_port`: Bitwig restarts GroupCtl, which starts not lent): UP + DOWN lends it again. Each side
+toggles on its own, so if they ever disagree, the chord flips both and they stay crossed: relaunching
+Bitwig's GroupCtl (not lent) and the chord until bathero says "lent" puts them back. bathero.log records
+every lend / return ("launchpad: lent (UP + DOWN)"), every press acted on, and the presses dropped
+while not lent. **Never close or reopen a MIDI port from the main thread on a timer**: a periodic
 reopen of idle inputs (that same day, to heal a supposedly deaf CoreMIDI input) froze the screen
 while the music played on, closing a port while its callback thread wanted the GIL. That night the
 Twister itself sent nothing (bank buttons and knobs, two minutes, a bare mido listener): neither

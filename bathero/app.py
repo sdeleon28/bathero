@@ -136,7 +136,8 @@ class App:
         self.launchpad_queue = deque()
         self.launchpad = LP.Launchpad(lambda kind, name: self.launchpad_queue.append((kind, name)))
         self.lp_explorer = LP.Explorer()
-        self.twister_bank = LP.read_bank()
+        self.twister_bank = 1
+        self.lp_lent = LP.read_lent()     # the Launchpad is ours: UP + DOWN together toggle it (launchpad.py)
         self.launchpad_checked = 0.0
         self.lp_repaint_at = None
         self.twister_checked = 0.0
@@ -700,21 +701,26 @@ class App:
             self.tw_seen = (time.perf_counter(), "tempo")     # the applied tempo stays up a moment
 
     def on_twister_bank(self, bank):
-        """The Twister changed bank: on bank 2 the Launchpad is ours (GroupCtl lets go of it at the
-        same message), anywhere else it is GroupCtl's and we stop sending."""
+        """The Twister changed bank. The Launchpad's lending no longer follows it (UP + DOWN)."""
         was = self.twister_bank
         self.twister_bank = bank
-        LP.write_bank(bank)
         print(f"twister: bank {bank} (was {was})", flush=True)
+        if bank == 2:
+            self.sync_twister()                     # bank 2's LEDs and rings, also after a replug the watcher missed
+
+    def set_lent(self, lent, why="UP + DOWN"):
+        """The Launchpad is ours (lent) or GroupCtl's; GroupCtl toggles at the same chord."""
+        was = self.lp_lent
+        self.lp_lent = lent
+        LP.write_lent(lent)
+        print(f"launchpad: {'lent' if lent else 'returned'} ({why})", flush=True)
         self.launchpad.forget()
         self.launchpad_queue.clear()
-        if bank == LP.LENT_BANK:
-            self.sync_twister()                     # bank 2's LEDs and rings, also after a replug the watcher missed
+        if lent:
             self.lp_explorer.enter()
             self.lp_repaint_at = time.perf_counter() + 0.3     # again, over a late frame of GroupCtl's
-            if was != bank:
-                self.toasts.add("Launchpad: the level's navigator (Twister bank 2)", ACCENT, key="launchpad")
-        elif was == LP.LENT_BANK:
+            self.toasts.add("Launchpad: the level's navigator (UP + DOWN gives it back)", ACCENT, key="launchpad")
+        elif was:
             self.toasts.add("Launchpad back to GroupCtl", DIM, key="launchpad")
 
     def poll_launchpad(self):
@@ -723,9 +729,17 @@ class App:
         if lp.inp is None and now - self.launchpad_checked > 3.0:
             self.launchpad_checked = now
             lp.open()
-        if lp.inp is None or self.twister_bank != LP.LENT_BANK:
+        if any(k == "lend" for k, _ in self.launchpad_queue):
+            flips = sum(1 for k, _ in self.launchpad_queue if k == "lend")
+            rest = [e for e in self.launchpad_queue if e[0] != "lend"]
+            if flips % 2:
+                self.set_lent(not self.lp_lent)
+            self.launchpad_queue.clear()
+            if self.lp_lent:
+                self.launchpad_queue.extend(rest)
+        if lp.inp is None or not self.lp_lent:
             if self.launchpad_queue:
-                print(f"launchpad: {len(self.launchpad_queue)} press(es) ignored, bathero thinks the Twister is on bank {self.twister_bank}", flush=True)
+                print(f"launchpad: {len(self.launchpad_queue)} press(es) ignored, not lent", flush=True)
             self.launchpad_queue.clear()
             return
         scr = self.screen_obj if isinstance(self.screen_obj, PlayScreen) else None
@@ -941,12 +955,10 @@ class App:
         pads are painted whole (a replugged controller comes back dark, and until 2026-11-08 the
         game kept its old ports and never repainted). True when the port was one of them."""
         low = name.lower()
-        if (TWISTER_HINT in low or LP.PORT_HINT in low) and self.twister_bank != 1:
+        if (TWISTER_HINT in low or LP.PORT_HINT in low) and self.lp_lent:
             # a controller came or went: Bitwig restarts GroupCtl, which starts with the Launchpad
-            # its own (not lent), and a Twister that powers up is on bank 1. Everyone goes back to
-            # bank 1, the Twister too, so pressing bank 2 lends it again on both sides.
-            self.twister.set_bank(1)
-            self.on_twister_bank(1)
+            # its own (not lent); UP + DOWN lends it again on both sides
+            self.set_lent(False, why="a controller was replugged")
         if TWISTER_HINT in low:
             self.twister.close()
             self.twister_checked = 0.0              # poll_twister reopens it and syncs the rings
@@ -1653,8 +1665,8 @@ class App:
             clock.tick(TARGET_FPS)
         if self.midi_in:
             self.midi_in.close()
-        if self.twister_bank == LP.LENT_BANK:
-            self.launchpad.show(LP.blank())               # ours until bank 1: dark, not a frozen level
+        if self.lp_lent:
+            self.launchpad.show(LP.blank())               # ours until returned: dark, not a frozen level
         self.launchpad.close()
         self.watcher.stop()
         self.set_layer(False)

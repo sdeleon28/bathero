@@ -1,12 +1,14 @@
-"""The Launchpad MK2 as the level's navigator, while the Twister is on bank 2.
+"""The Launchpad MK2 as the level's navigator, while it is lent to bathero.
 
-The Launchpad is GroupCtl's (bitwig-maps) the rest of the time. The Twister's bank buttons send
-a CC on channel 4 (CC 0..3, one per bank, 127 for the bank entered, 0 for the one left), which
-both programs hear: on bank 2 GroupCtl's `launchpadlending` package stops painting and listening,
-on bank 1 it repaints its page. bathero takes over at the same message, paints the whole surface
-(twice, in case a last frame of GroupCtl's lands after the first), and on bank 1 just stops
-sending: it never blanks the surface to hand it back, GroupCtl repaints it. The last bank seen is
-kept in ~/.config/bathero/twister_bank, since a relaunch of the game does not hear the bank.
+The Launchpad is GroupCtl's (bitwig-maps) the rest of the time. **UP and DOWN pressed together**
+(the second one down while the first is held) toggle the lending, and both programs hear the
+chord: lent, GroupCtl's `launchpadlending` package stops painting and listening; returned, it
+repaints its page. bathero takes over at the same chord, paints the whole surface (twice, in case
+a last frame of GroupCtl's lands after the first), and on return just stops sending: it never
+blanks the surface to hand it back, GroupCtl repaints it. Until 2026-11-15 the Twister's bank
+buttons did this and it kept slipping out of step; the Twister's bank no longer touches it. The
+state is kept in ~/.config/bathero/launchpad_lent, since the game is relaunched by every deploy
+and GroupCtl is not.
 
 The controls are GroupCtl's project explorer (baseexplorer, normalexplorer), on the level instead
 of the arranger: the 64 pads are the level's bars in reading order from the top left, each bar
@@ -16,7 +18,7 @@ pad there starts the count from that bar.
 
     pad              jump there (one bar of run-up, like the number keys)
     SESSION / USER 1 zoom out / in: 1, 2, 4 .. 32 bars a pad; auto-fit (the finest that fits one
-                     page) on every new level and every time bank 2 is entered, until zoomed by hand
+                     page) on every new level and every time it is lent, until zoomed by hand
     LEFT / RIGHT     the previous / next 64 pads
     MIXER            the loop gesture: press it (white), then two pads, the first and the last of
                      the loop; it marks the range and leaves the gesture (red again)
@@ -34,8 +36,7 @@ import time
 import mido
 
 PORT_HINT = "launchpad"
-BANK_FILE = os.path.expanduser("~/.config/bathero/twister_bank")
-LENT_BANK = 2
+LENT_FILE = os.path.expanduser("~/.config/bathero/launchpad_lent")
 
 PADS = [r * 10 + c for r in range(8, 0, -1) for c in range(1, 9)]       # 81..88, 71..78 .. 11..18
 PAGE_SIZE = 64
@@ -61,18 +62,18 @@ SECTION_COLORS = {"intro": 41, "verse": 21, "pre-chorus": 57, "chorus": 5, "brid
 OTHER_SECTION = 53
 
 
-def read_bank():
+def read_lent():
     try:
-        return int(open(BANK_FILE).read().strip())
-    except (OSError, ValueError):
-        return 1
+        return open(LENT_FILE).read().strip() == "1"
+    except OSError:
+        return False
 
 
-def write_bank(bank):
+def write_lent(lent):
     try:
-        os.makedirs(os.path.dirname(BANK_FILE), exist_ok=True)
-        with open(BANK_FILE, "w") as f:
-            f.write(f"{bank}\n")
+        os.makedirs(os.path.dirname(LENT_FILE), exist_ok=True)
+        with open(LENT_FILE, "w") as f:
+            f.write("1\n" if lent else "0\n")
     except OSError:
         pass
 
@@ -87,6 +88,7 @@ class Launchpad:
         self.inp = self.out = None
         self.name = None
         self.held = {}
+        self.arrows = {}           # CC 104 / 105 -> held: UP + DOWN together toggle the lending
         self.shown = {}            # ("note" | "cc", n) -> (colour, blink)
         self.lock = threading.Lock()
         self.heard = 0.0           # perf_counter of the last message in (App.poll_launchpad refreshes an idle port)
@@ -121,6 +123,14 @@ class Launchpad:
     def _cb(self, msg):
         now = time.perf_counter()
         self.heard = now
+        if msg.type == "control_change" and msg.control in (104, 105):
+            down = msg.value > 0
+            other = 105 if msg.control == 104 else 104
+            chord = down and self.arrows.get(other, False)
+            self.arrows[msg.control] = down
+            if chord:
+                self.on_event("lend", None)      # UP + DOWN: the lending toggles (GroupCtl hears it too)
+            return
         if msg.type == "control_change" and msg.control in TOP:
             if msg.value > 0:
                 self.on_event("top", TOP[msg.control])
