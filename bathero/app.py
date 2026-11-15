@@ -736,6 +736,7 @@ class App:
         scr = self.screen_obj if isinstance(self.screen_obj, PlayScreen) else None
         while self.launchpad_queue:
             kind, name = self.launchpad_queue.popleft()
+            print(f"launchpad: {kind} {name} ({'play screen' if scr is not None else 'no play screen'})", flush=True)
             if scr is not None:
                 scr.on_launchpad(kind, name)
         if self.lp_repaint_at is not None and now >= self.lp_repaint_at:
