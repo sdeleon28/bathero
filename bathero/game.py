@@ -256,13 +256,33 @@ class Game:
 
     def _drive_tracks(self, t):
         """Start each enabled track at its own t0 (the count-in), restart it after a pause
-        from the current time, and stop everything when the level is over."""
+        from the current time, and stop everything when the level is over. The lock is held.
+
+        Every track to start is built first and then they all play together, and the chart's
+        clock is pulled back by the time that took, so the sample heard and the chart agree
+        (2026-11-14: the loop's laps were judged -8 ms one lap, -51 the next; building the
+        Sound of a whole stem's remainder took a variable while the clock ran on, and the
+        tracks were built one after the other, each later than the one before)."""
+        t0 = time.perf_counter()
+        start = []
+        others = any(tr.playing for tr, _ in self.tracks.values())   # tracks already sounding keep the clock
         for track, enabled in self.tracks.values():
             want = enabled and not self.finished and t < track.end
             if want and not track.playing and t >= track.t0 - 0.004:
-                track.start_at(t)
+                start.append(track)
             elif not want and track.playing:
                 track.stop()
+        if not start:
+            return
+        until = self.loop[1] + 0.5 if self.loop is not None else None    # the wrap restarts them anyway
+        ready = [tr for tr in start if tr.prepare(t, until)]
+        for tr in ready:
+            tr.play()
+        spent = time.perf_counter() - t0
+        if ready and not others:
+            self.wall_start += spent                    # the chart waits for the audio it started
+        if self.log is not None:
+            self.log.add("tracks", chart_t=round(t, 4), n=len(ready), build_ms=round(spent * 1000, 2))
 
     # --- input -------------------------------------------------------------
     def hit(self, note: int, velocity: int = 100, wall_t: float = None, art: str = None, cc: int = None):
@@ -411,7 +431,11 @@ class Game:
                 return
             t = self.song_time()
             if self.loop is not None and t >= self.loop[1]:
+                over = t - self.loop[1]         # the frame came this late: keep it, or the pulse slips by it
                 self._seek(self.loop[0])        # straight back, no run-up: the loop keeps the pulse
+                self.wall_start -= over
+                if self.log is not None:
+                    self.log.add("wrap", over_ms=round(over * 1000, 2))
                 self._reset_score()             # each lap scores on its own (asked 2026-11-09)
                 t = self.song_time()
             # a note is missed once a hit could no longer reach it: the hits are dated

@@ -1012,13 +1012,25 @@ class Track:
     def end(self):
         return self.t0 + len(self.pcm) / SR
 
-    def start_at(self, t):
+    def start_at(self, t, until=None):
+        self.prepare(t, until)
+        self.play()
+
+    def prepare(self, t, until=None):
+        """Build the Sound from chart time t (to `until`, if given: a loop needs only its lap,
+        and copying the whole rest of a song is what made a restart slow), without playing it."""
         self.stop()
         i = int(max(0.0, t - self.t0) * SR)
         if i >= len(self.pcm):
-            return
-        self.sound = pygame.sndarray.make_sound(np.ascontiguousarray(self.pcm[i:]))
+            return False
+        j = len(self.pcm) if until is None else max(i + 1, min(len(self.pcm), int((until - self.t0) * SR)))
+        self.sound = pygame.sndarray.make_sound(np.ascontiguousarray(self.pcm[i:j]))
         self.apply_gain()
+        return True
+
+    def play(self):
+        if self.sound is None:
+            return
         if self.channel is not None:
             pygame.mixer.Channel(self.channel).play(self.sound)
         else:
