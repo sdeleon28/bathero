@@ -640,6 +640,9 @@ class App:
                 self.toasts.add(f"Twister: bank 2 is the song mixer", ACCENT, key="twister")
                 self.sync_twister()
                 self.twister_resync_at = now + 1.0       # again, in case a replugged Twister was still booting
+        tw = self.twister
+        if tw.inp is not None and now - max(tw.heard, tw.opened) > self.PORT_REFRESH_S:
+            tw.refresh()                                 # an idle input may have gone deaf (Twister.refresh)
         if getattr(self, "twister_resync_at", None) and now >= self.twister_resync_at:
             self.twister_resync_at = None
             self.sync_twister()
@@ -697,12 +700,17 @@ class App:
                 scr.retry()
             self.tw_seen = (time.perf_counter(), "tempo")     # the applied tempo stays up a moment
 
+    PORT_REFRESH_S = 10.0     # an input silent this long is reopened (a deaf CoreMIDI connection heals by itself)
+
     def on_twister_bank(self, bank):
         """The Twister changed bank: on bank 2 the Launchpad is ours (GroupCtl lets go of it at the
         same message), anywhere else it is GroupCtl's and we stop sending."""
         was = self.twister_bank
         self.twister_bank = bank
         LP.write_bank(bank)
+        print(f"twister: bank {bank} (was {was})", flush=True)
+        if bank == LP.LENT_BANK and self.launchpad.inp is not None:
+            self.launchpad.refresh()                # the gesture heals a deaf Launchpad input on its own
         self.launchpad.forget()
         self.launchpad_queue.clear()
         if bank == LP.LENT_BANK:
@@ -720,6 +728,8 @@ class App:
         if lp.inp is None and now - self.launchpad_checked > 3.0:
             self.launchpad_checked = now
             lp.open()
+        if lp.inp is not None and now - max(lp.heard, lp.opened) > self.PORT_REFRESH_S:
+            lp.refresh()                            # an idle input may have gone deaf (Launchpad.refresh)
         if lp.inp is None or self.twister_bank != LP.LENT_BANK:
             self.launchpad_queue.clear()
             return
@@ -932,6 +942,12 @@ class App:
         pads are painted whole (a replugged controller comes back dark, and until 2026-11-08 the
         game kept its old ports and never repainted). True when the port was one of them."""
         low = name.lower()
+        if (TWISTER_HINT in low or LP.PORT_HINT in low) and self.twister_bank != 1:
+            # a controller came or went: Bitwig restarts GroupCtl, which starts with the Launchpad
+            # its own (not lent), and a Twister that powers up is on bank 1. Everyone goes back to
+            # bank 1, the Twister too, so pressing bank 2 lends it again on both sides.
+            self.twister.set_bank(1)
+            self.on_twister_bank(1)
         if TWISTER_HINT in low:
             self.twister.close()
             self.twister_checked = 0.0              # poll_twister reopens it and syncs the rings

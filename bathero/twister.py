@@ -14,6 +14,7 @@ The bank buttons send CC 0..3 on channel 4 (bank 1..4), 127 for the bank entered
 one left: `on_bank` gets the bank entered (bathero.launchpad takes the Launchpad on bank 2).
 """
 import threading
+import time
 
 import mido
 
@@ -51,8 +52,10 @@ class Twister:
         self.lock = threading.Lock()
         self.seen = set()          # (channel, control) already logged: one line per knob, to bathero.log
         self.turning = False       # True while the game applies a turn: its own ring is not echoed back
+        self.heard = 0.0           # perf_counter of the last message in (App.poll_twister refreshes an idle port)
+        self.opened = 0.0
 
-    def open(self):
+    def open(self, quiet=False):
         if self.inp is not None:
             return True
         ins = [n for n in mido.get_input_names() if PORT_HINT in n.lower()]
@@ -64,13 +67,34 @@ class Twister:
             outs = [n for n in mido.get_output_names() if PORT_HINT in n.lower()]
             if outs:
                 self.out = mido.open_output(outs[0])
-            print(f"twister: opened '{self.name}' (out: {outs[0] if outs else 'none'})", flush=True)
+            self.opened = time.perf_counter()
+            if not quiet:
+                print(f"twister: opened '{self.name}' (out: {outs[0] if outs else 'none'})", flush=True)
         except (OSError, IOError):
             self.close()
             return False
         return True
 
+    def refresh(self):
+        """Close and reopen the ports. CoreMIDI drops an input's connection when the device goes
+        away for a moment (sleep, a hub reset, a replug quicker than the watcher's poll) while the
+        port name stays, and the callback then never fires again: the bank gesture went dead and
+        only a replug brought it back. Reopening an idle port costs ~2 ms."""
+        self.close()
+        return self.open(quiet=True)
+
+    def set_bank(self, bank):
+        """Move the Twister to a bank (1..4) from the host: CC bank-1 at 127 on the system channel."""
+        if self.out is None:
+            return
+        with self.lock:
+            try:
+                self.out.send(mido.Message("control_change", channel=SYSTEM_CH, control=bank - 1, value=127))
+            except (OSError, IOError):
+                pass
+
     def _cb(self, msg):
+        self.heard = time.perf_counter()
         if msg.type != "control_change":
             return
         if msg.channel == SYSTEM_CH and msg.control < BANKS:

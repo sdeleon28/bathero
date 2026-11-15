@@ -89,8 +89,10 @@ class Launchpad:
         self.held = {}
         self.shown = {}            # ("note" | "cc", n) -> (colour, blink)
         self.lock = threading.Lock()
+        self.heard = 0.0           # perf_counter of the last message in (App.poll_launchpad refreshes an idle port)
+        self.opened = 0.0
 
-    def open(self):
+    def open(self, quiet=False):
         if self.inp is not None:
             return True
         ins = [n for n in mido.get_input_names() if PORT_HINT in n.lower()]
@@ -101,14 +103,24 @@ class Launchpad:
             self.inp = mido.open_input(ins[0], callback=self._cb)
             self.out = mido.open_output(outs[0])
             self.name = ins[0]
-            print(f"launchpad: opened '{self.name}'", flush=True)
+            self.opened = time.perf_counter()
+            if not quiet:
+                print(f"launchpad: opened '{self.name}'", flush=True)
         except (OSError, IOError):
             self.close()
             return False
         return True
 
+    def refresh(self):
+        """Close and reopen the ports (see Twister.refresh: a CoreMIDI input can go deaf with its
+        name still listed, which is how the pads stopped seeking while the playhead kept blinking).
+        The surface is repainted whole on the next `show`."""
+        self.close()
+        return self.open(quiet=True)
+
     def _cb(self, msg):
         now = time.perf_counter()
+        self.heard = now
         if msg.type == "control_change" and msg.control in TOP:
             if msg.value > 0:
                 self.on_event("top", TOP[msg.control])

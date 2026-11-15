@@ -404,6 +404,17 @@ until zoomed by hand); LEFT / RIGHT page; MIXER then two pads marks a loop of ba
 either as times, which the renderer draws); side MUTE toggles the loop, side STOP pauses / plays
 (starts the level from the intro). The playing pad blinks white, the loop is white. Pads and side
 buttons act on release unless held 0.5 s; other screens show it dark.
+**Keeping the lending alive** (2026-11-14, "the gesture breaks every so often and only replugging helps"):
+CoreMIDI can leave an input deaf with its name still listed (sleep, a hub reset, a replug quicker than
+the watcher's 1.5 s poll: the Launchpad is on its 12th CoreMIDI entity), so the bank CC or the pads
+stopped arriving while bathero's paint still went out. The Twister's and the Launchpad's ports are
+reopened whenever they have heard nothing for `App.PORT_REFRESH_S` (10 s; ~2 ms, `refresh()`), and
+entering bank 2 reopens the Launchpad's, so the gesture heals itself. A controller that leaves or
+arrives puts everyone on bank 1 (`controller_port`: Bitwig restarts GroupCtl, which starts not lent, and
+a Twister powers up on bank 1; bathero sends the Twister to bank 1 too, `Twister.set_bank`): press bank
+2 again. Every bank change is logged ("twister: bank 2 (was 1)") in bathero.log. Still edge-triggered
+on GroupCtl's side: a level-triggered lend (bathero sending a heartbeat on an IAC bus, GroupCtl lent
+while it arrives) is the next step if it still drifts.
 
 **Songs are sorted by difficulty** (asked for 2026-11-08, `songs.difficulty`, 0..10, easiest first,
 shown first on each row): from the chart in absolute time, never in beats (beat_this halved some
