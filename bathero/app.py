@@ -47,6 +47,7 @@ from . import launchpad as LP
 from . import songedit as SE
 from . import importer as IM
 from .ghost import GhostFilter
+from .midilag import LagMeter
 from .sounds import (BACKING_GAIN, METRONOME_GAIN, PROGRESSIONS, SoundBank, Track,
                      menu_music_sound, output_devices, render_backing_track, render_count, render_metronome, MENU_CHANNEL)
 from . import sounds as SND
@@ -122,6 +123,7 @@ class App:
         self.tries = {k: v.get("tries", 0) for k, v in self.results.items()}   # attempts under five stars in a row, per level
         self.midi_name = None
         self.midi_in = None
+        self.lag_meter = LagMeter()   # how long each note waited for Python (midilag.py)
         self.screen_obj = None
         self.fullscreen = False
         self.drum_queue = deque()  # navigation hits, handed to the screen on the main thread
@@ -868,6 +870,7 @@ class App:
             name = find_module(names)
         if name:
             self.midi_in = mido.open_input(name, callback=self.on_midi)
+            self.lag_meter.install(self.midi_in)
             self.midi_name = name
             print(f"MIDI input: {name}")
         else:
@@ -891,13 +894,15 @@ class App:
             scr = self.screen_obj
             if scr is None:
                 return
+            lag = self.lag_meter.lag
+            lag = round(lag * 1000, 2) if lag is not None else None
             why = self.ghosts.reason(msg.note, msg.velocity)
             if why is not None:
                 scr.on_ghost(msg.note, msg.velocity, why)
-                self.runlog.add("ghost", note=msg.note, velocity=msg.velocity, why=why)
+                self.runlog.add("ghost", note=msg.note, velocity=msg.velocity, why=why, lag=lag)
                 result = why
             else:
-                self.runlog.add("note", note=msg.note, velocity=msg.velocity, cc=self.ghosts.pedal_cc)
+                self.runlog.add("note", note=msg.note, velocity=msg.velocity, cc=self.ghosts.pedal_cc, lag=lag)
                 result = scr.on_note(msg.note, msg.velocity)
             self.debug_hits.append((time.perf_counter(), msg.note, msg.velocity, self.instrument_for(msg.note),
                                     result if isinstance(result, str) else None, why is not None))
@@ -966,6 +971,8 @@ class App:
                         if self.midi_in is not None:
                             self.midi_in.close()
                         self.midi_in = mido.open_input(name, callback=self.on_midi)
+                        self.lag_meter = LagMeter()
+                        self.lag_meter.install(self.midi_in)
                         self.midi_name = name
                     except (OSError, IOError) as e:
                         self.toasts.add(f"{name}: could not open ({e})", bad)
